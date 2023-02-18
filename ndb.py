@@ -374,6 +374,9 @@ class Renderer:
             pass
         elif inputVal == b"\n":
             # Execute command.
+            if not self.input:
+                return None
+
             if self.input[0] == "!":
                 # Link navigation.
                 try:
