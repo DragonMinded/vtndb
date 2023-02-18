@@ -51,9 +51,11 @@ class Navigation:
 
 
 class RendererCore:
-    def __init__(self, terminal: Terminal, rows: int) -> None:
+    def __init__(self, terminal: Terminal, top: int, bottom: int) -> None:
         self.terminal = terminal
-        self.rows = rows
+        self.top = top
+        self.bottom = bottom
+        self.rows = (bottom - top) + 1
 
     def scrollUp(self) -> None:
         pass
@@ -63,8 +65,8 @@ class RendererCore:
 
 
 class TextRendererCore(RendererCore):
-    def __init__(self, terminal: Terminal, rows: int) -> None:
-        super().__init__(terminal, rows)
+    def __init__(self, terminal: Terminal, top: int, bottom: int) -> None:
+        super().__init__(terminal, top, bottom)
         self.text: List[str] = []
         self.line: int = 0
 
@@ -167,9 +169,8 @@ class TextRendererCore(RendererCore):
         self.text = text.split("\n")
 
         # Control our scroll region, only erase the text we want.
-        # TODO: Calculate this based on self.rows and such.
-        self.terminal.moveCursor(3, 1)
-        self.terminal.setScrollRegion(3, self.terminal.rows - 2)
+        self.terminal.moveCursor(self.top, 1)
+        self.terminal.setScrollRegion(self.top, self.bottom)
 
         # Display the visible chunk of text.
         self.line = 0
@@ -183,8 +184,8 @@ class TextRendererCore(RendererCore):
             self.line -= 1
 
             self.terminal.sendCommand(Terminal.SAVE_CURSOR)
-            self.terminal.moveCursor(3, 1)
-            self.terminal.setScrollRegion(3, self.terminal.rows - 2)
+            self.terminal.moveCursor(self.top, 1)
+            self.terminal.setScrollRegion(self.top, self.bottom)
             self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
             self._displayText(self.line, self.line + 1)
             self.terminal.clearScrollRegion()
@@ -195,8 +196,8 @@ class TextRendererCore(RendererCore):
             self.line += 1
 
             self.terminal.sendCommand(Terminal.SAVE_CURSOR)
-            self.terminal.setScrollRegion(3, self.terminal.rows - 2)
-            self.terminal.moveCursor(self.terminal.rows - 2, 1)
+            self.terminal.setScrollRegion(self.top, self.bottom)
+            self.terminal.moveCursor(self.bottom, 1)
             self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
             self._displayText(self.line + (self.rows - 1), self.line + self.rows)
             self.terminal.clearScrollRegion()
@@ -276,7 +277,7 @@ class Renderer:
         self.input = ""
         self.page: Optional[Page] = None
         self.lastError = ""
-        self.renderer = RendererCore(terminal, 20)
+        self.renderer = RendererCore(terminal, 3, self.terminal.rows - 2)
 
     def displayPage(self, page: Page) -> None:
         # Remember the page for going back to it for navigation.
@@ -301,7 +302,7 @@ class Renderer:
 
         # Render out the text of the page.
         if page.data.startswith("css"):
-            self.renderer = TextRendererCore(self.terminal, 20)
+            self.renderer = TextRendererCore(self.terminal, 3, self.terminal.rows - 2)
             self.renderer.displayText(page.data[3:])
 
         # Move cursor to where we expect it for input.
