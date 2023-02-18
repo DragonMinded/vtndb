@@ -3,3 +3,4 @@ pyserial
 mypy
 flake8
 black
+types-requests

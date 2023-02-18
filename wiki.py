@@ -13,7 +13,15 @@ class Metadata:
 
 
 class Page:
-    def __init__(self, name: str, path: str, back: Optional[str], data: str, links: List[str], meta: Metadata) -> None:
+    def __init__(
+        self,
+        name: str,
+        path: str,
+        back: Optional[str],
+        data: str,
+        links: List[str],
+        meta: Metadata,
+    ) -> None:
         self.name = name
         self.path = path
         self.back = back
@@ -23,7 +31,9 @@ class Page:
 
 
 class Domain:
-    def __init__(self, root: str, address: str, default: str, error: str, pages: List[Page]) -> None:
+    def __init__(
+        self, root: str, address: str, default: str, error: str, pages: List[Page]
+    ) -> None:
         self.root = root
         self.address = address
         self.default = default
@@ -71,7 +81,7 @@ class Wiki:
                 back = page.get("backpath")
                 data = page["data"]
                 links = [str(s) for s in page["links"]]
-                
+
                 meta = page["meta"]
                 metadata = Metadata(
                     author=meta["author"],
@@ -80,22 +90,26 @@ class Wiki:
                     modified=meta["editTime"],
                 )
 
-                pages.append(Page(
-                    name=name,
-                    path=path,
-                    back=back,
-                    data=data,
-                    links=links,
-                    meta=metadata,
-                ))
+                pages.append(
+                    Page(
+                        name=name,
+                        path=path,
+                        back=back,
+                        data=data,
+                        links=links,
+                        meta=metadata,
+                    )
+                )
 
-            self.domains.append(Domain(
-                root=root,
-                address=address,
-                default=default,
-                error=error,
-                pages=pages,
-            ))
+            self.domains.append(
+                Domain(
+                    root=root,
+                    address=address,
+                    default=default,
+                    error=error,
+                    pages=pages,
+                )
+            )
 
         self.nonexistant = Domain(
             root="unspecified",
@@ -118,7 +132,6 @@ class Wiki:
                 ),
             ],
         )
-
 
     def getPage(self, uri: str) -> Page:
         if ":" in uri:
@@ -149,7 +162,11 @@ class Wiki:
             if page.path == found.error:
                 return page
 
-        raise Exception("Path " + uri + " resolves to a domain with no valid path and no valid error page!")
+        raise Exception(
+            "Path "
+            + uri
+            + " resolves to a domain with no valid path and no valid error page!"
+        )
 
 
 if __name__ == "__main__":
