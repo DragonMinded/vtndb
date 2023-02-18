@@ -12,10 +12,19 @@ class Terminal:
     REQUEST_CURSOR: bytes = b"[6n"
 
     MOVE_CURSOR_ORIGIN: bytes = b"[H"
+
+    CLEAR_TO_ORIGIN: bytes = b"[1J"
     CLEAR_SCREEN: bytes = b"[2J"
+    CLEAR_LINE: bytes = b"[2K"
 
     SET_132_COLUMNS: bytes = b"[?3h"
     SET_80_COLUMNS: bytes = b"[?3l"
+
+    TURN_ON_REGION: bytes = b"[?6h"
+    TURN_OFF_REGION: bytes = b"[?6l"
+
+    TURN_ON_AUTOWRAP: bytes = b"[?7h"
+    TURN_OFF_AUTOWRAP: bytes = b"[?7l"
 
     SET_BOLD: bytes = b"[1m"
     SET_NORMAL: bytes = b"[m"
@@ -42,6 +51,7 @@ class Terminal:
         self.sendCommand(self.MOVE_CURSOR_ORIGIN)
         self.sendCommand(self.SET_80_COLUMNS)
         self.sendCommand(self.SET_NORMAL)
+        self.sendCommand(self.TURN_ON_AUTOWRAP)
         self.columns: int = 80
         self.rows: int = 24
 
@@ -84,6 +94,13 @@ class Terminal:
                 return b"+"
 
         self.serial.write(b"".join(fb(s) for s in text))
+
+    def setScrollRegion(self, top: int, bottom: int) -> None:
+        self.sendCommand(f"[{top};{bottom}r".encode("ascii"))
+        self.sendCommand(self.TURN_ON_REGION)
+
+    def clearScrollRegion(self) -> None:
+        self.sendCommand(self.TURN_OFF_REGION)
 
     def recvResponse(self, timeout: Optional[float] = None) -> bytes:
         gotResponse: bool = False

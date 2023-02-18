@@ -20,6 +20,10 @@ class BackAction(Action):
     pass
 
 
+class HomeAction(Action):
+    pass
+
+
 class SettingAction(Action):
     def __init__(self, setting: str, value: Optional[str]) -> None:
         self.setting = setting
@@ -59,8 +63,16 @@ class Rendering:
         if data.startswith("css"):
             data = data[3:]
 
-        self.terminal.sendCommand(Terminal.CLEAR_SCREEN)
+        # Render status bar at the bottom.
+        self.clearInput()
+
+        # Control our scroll region, only erase the text we want.
+        self.terminal.setScrollRegion(1, self.terminal.columns - 1)
+        self.terminal.moveCursor(self.terminal.rows - 1, 1)
+        self.terminal.sendCommand(Terminal.CLEAR_TO_ORIGIN)
         self.terminal.sendCommand(Terminal.MOVE_CURSOR_ORIGIN)
+
+        # Reset text display and put title up.
         self.terminal.sendCommand(Terminal.SET_NORMAL)
         self.terminal.sendCommand(Terminal.SET_BOLD)
         self.terminal.sendText(f"{page.domain.root}:{page.path} -- {page.name}\n\n")
@@ -85,8 +97,9 @@ class Rendering:
                 self.terminal.sendText(data)
                 data = ""
 
-        # Render status bar at the bottom.
-        self.clearInput()
+        # Move cursor to where we expect it for input.
+        self.terminal.clearScrollRegion()
+        self.terminal.moveCursor(self.terminal.rows, 1)
 
     def clearInput(self) -> None:
         self.terminal.moveCursor(self.terminal.rows, 1)
@@ -173,6 +186,8 @@ class Rendering:
                     else:
                         # Assume current domain.
                         return NavigateAction(f"{page.domain.root}:{newpage}")
+            elif self.input == "home":
+                return HomeAction()
             elif self.input.startswith("set"):
                 if " " not in self.input:
                     self.displayError("No setting requested!")
@@ -234,6 +249,9 @@ def main(port: str, baudrate: int) -> int:
             action = renderer.processInput(inputVal)
             if isinstance(action, NavigateAction):
                 page = nav.navigate(action.uri)
+                renderer.displayPage(page)
+            elif isinstance(action, HomeAction):
+                page = nav.navigate("NX.INDEX")
                 renderer.displayPage(page)
             elif isinstance(action, BackAction):
                 if nav.canGoBack():
