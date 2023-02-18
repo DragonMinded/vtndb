@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 from typing import List, Optional
 
@@ -17,6 +18,12 @@ class NavigateAction(Action):
 
 class BackAction(Action):
     pass
+
+
+class SettingAction(Action):
+    def __init__(self, setting: str, value: Optional[str]) -> None:
+        self.setting = setting
+        self.value = value
 
 
 class Navigation:
@@ -143,7 +150,6 @@ class Rendering:
                     if link < 0 or link >= len(page.links):
                         self.displayError("Unknown link navigation request!")
 
-                    self.clearInput()
                     if ":" in page.links[link] or not page.links[link].startswith("/"):
                         # Fully qualified path.
                         return NavigateAction(page.links[link])
@@ -153,7 +159,6 @@ class Rendering:
                 except ValueError:
                     self.displayError("Invalid link navigation request!")
             elif self.input == "back":
-                self.clearInput()
                 return BackAction()
             elif self.input.startswith("goto"):
                 if " " not in self.input:
@@ -168,8 +173,36 @@ class Rendering:
                     else:
                         # Assume current domain.
                         return NavigateAction(f"{page.domain.root}:{newpage}")
+            elif self.input.startswith("set"):
+                if " " not in self.input:
+                    self.displayError("No setting requested!")
+                else:
+                    _, setting = self.input.split(" ", 1)
+                    setting = setting.strip()
+
+                    if "=" in setting:
+                        setting, value = setting.split("=", 1)
+                        setting = setting.strip()
+                        value = value.strip()
+                    else:
+                        setting = setting.strip()
+                        value = None
+
+                    return SettingAction(setting, value)
+            elif self.input.startswith("cd"):
+                if " " not in self.input:
+                    self.displayError("No directory specified!")
+                else:
+                    _, newdir = self.input.split(" ", 1)
+                    newdir = newdir.strip()
+
+                    newpage = os.path.abspath(os.path.join(page.path, newdir))
+                    if not newpage:
+                        newpage = "/"
+
+                    return NavigateAction(f"{page.domain.root}:{newpage}")
             else:
-                self.displayError("Unrecognized command " + self.input)
+                self.displayError(f"Unrecognized command {self.input}")
         else:
             # Just add to input.
             row, col = self.terminal.fetchCursor()
@@ -206,6 +239,28 @@ def main(port: str, baudrate: int) -> int:
                 if nav.canGoBack():
                     page = nav.back()
                     renderer.displayPage(page)
+                else:
+                    renderer.clearInput()
+            elif isinstance(action, SettingAction):
+                if action.setting in {"cols", "columns"}:
+                    if action.value not in {"80", "132"}:
+                        renderer.displayError(
+                            f"Unrecognized column setting {action.value}"
+                        )
+                    elif action.value == "80":
+                        if terminal.columns != 80:
+                            terminal.set80Columns()
+                            renderer.displayPage(page)
+                        else:
+                            renderer.clearInput()
+                    elif action.value == "132":
+                        if terminal.columns != 132:
+                            terminal.set132Columns()
+                            renderer.displayPage(page)
+                        else:
+                            renderer.clearInput()
+                else:
+                    renderer.displayError(f"Unrecognized setting {action.setting}")
 
     return 0
 

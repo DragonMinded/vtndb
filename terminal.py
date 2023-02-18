@@ -35,9 +35,7 @@ class Terminal:
         self.pending = b""
 
         # First, connect and figure out what's going on.
-        self.sendCommand(self.REQUEST_STATUS)
-        if self.recvResponse() != self.STATUS_OKAY:
-            raise Exception("Terminal is not okay!")
+        self.checkOk()
 
         # Reset terminal.
         self.sendCommand(self.CLEAR_SCREEN)
@@ -47,12 +45,19 @@ class Terminal:
         self.columns: int = 80
         self.rows: int = 24
 
+    def checkOk(self) -> None:
+        self.sendCommand(self.REQUEST_STATUS)
+        if self.recvResponse() != self.STATUS_OKAY:
+            raise Exception("Terminal is not okay!")
+
     def set132Columns(self) -> None:
         self.sendCommand(self.SET_132_COLUMNS)
+        self.checkOk()
         self.columns = 132
 
     def set80Columns(self) -> None:
         self.sendCommand(self.SET_80_COLUMNS)
+        self.checkOk()
         self.columns = 80
 
     def sendCommand(self, cmd: bytes) -> None:
