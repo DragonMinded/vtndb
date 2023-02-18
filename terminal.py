@@ -51,7 +51,7 @@ class Terminal:
         self.sendCommand(self.MOVE_CURSOR_ORIGIN)
         self.sendCommand(self.SET_80_COLUMNS)
         self.sendCommand(self.SET_NORMAL)
-        self.sendCommand(self.TURN_ON_AUTOWRAP)
+        self.sendCommand(self.TURN_OFF_AUTOWRAP)
         self.columns: int = 80
         self.rows: int = 24
 
@@ -94,6 +94,15 @@ class Terminal:
                 return b"+"
 
         self.serial.write(b"".join(fb(s) for s in text))
+
+    def setAutoWrap(self, value: bool = True) -> None:
+        if value:
+            self.sendCommand(self.TURN_ON_AUTOWRAP)
+        else:
+            self.sendCommand(self.TURN_OFF_AUTOWRAP)
+
+    def clearAutoWrap(self) -> None:
+        self.setAutoWrap(False)
 
     def setScrollRegion(self, top: int, bottom: int) -> None:
         self.sendCommand(f"[{top};{bottom}r".encode("ascii"))

@@ -53,8 +53,10 @@ class Navigation:
 class Rendering:
     def __init__(self, terminal: Terminal) -> None:
         self.terminal = terminal
+        self.terminal.setAutoWrap()
         self.input = ""
         self.page: Optional[Page] = None
+        self.lastError = ""
 
     def displayPage(self, page: Page) -> None:
         self.page = page
@@ -66,17 +68,21 @@ class Rendering:
         # Render status bar at the bottom.
         self.clearInput()
 
-        # Control our scroll region, only erase the text we want.
-        self.terminal.setScrollRegion(1, self.terminal.columns - 1)
-        self.terminal.moveCursor(self.terminal.rows - 1, 1)
+        # First, wipe the screen and display the title.
+        self.terminal.moveCursor(self.terminal.rows - 2, 1)
+        self.terminal.sendCommand(Terminal.CLEAR_LINE)
         self.terminal.sendCommand(Terminal.CLEAR_TO_ORIGIN)
         self.terminal.sendCommand(Terminal.MOVE_CURSOR_ORIGIN)
 
         # Reset text display and put title up.
         self.terminal.sendCommand(Terminal.SET_NORMAL)
         self.terminal.sendCommand(Terminal.SET_BOLD)
-        self.terminal.sendText(f"{page.domain.root}:{page.path} -- {page.name}\n\n")
+        self.terminal.sendText(f"{page.domain.root}:{page.path} -- {page.name}")
         self.terminal.sendCommand(Terminal.SET_NORMAL)
+
+        # Control our scroll region, only erase the text we want.
+        self.terminal.moveCursor(3, 1)
+        self.terminal.setScrollRegion(3, self.terminal.rows - 2)
 
         while data:
             if "[" in data:
@@ -102,6 +108,9 @@ class Rendering:
         self.terminal.moveCursor(self.terminal.rows, 1)
 
     def clearInput(self) -> None:
+        # Clear error display.
+        self.displayError("")
+
         self.terminal.moveCursor(self.terminal.rows, 1)
         self.terminal.sendCommand(Terminal.SAVE_CURSOR)
         self.terminal.sendCommand(Terminal.SET_REVERSE)
@@ -112,8 +121,18 @@ class Rendering:
         self.input = ""
 
     def displayError(self, error: str) -> None:
-        # TODO: Display this on the VT-100
-        print(error)
+        if error == self.lastError:
+            return
+
+        self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+        self.terminal.moveCursor(self.terminal.rows - 1, 1)
+        self.terminal.sendCommand(Terminal.CLEAR_LINE)
+        self.terminal.sendCommand(Terminal.SET_NORMAL)
+        self.terminal.sendCommand(Terminal.SET_BOLD)
+        self.terminal.sendText(error)
+        self.terminal.sendCommand(Terminal.SET_NORMAL)
+        self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+        self.lastError = error
 
     def processInput(self, inputVal: bytes) -> Optional[Action]:
         if self.page is None:
@@ -162,8 +181,7 @@ class Rendering:
 
                     if link < 0 or link >= len(page.links):
                         self.displayError("Unknown link navigation request!")
-
-                    if ":" in page.links[link] or not page.links[link].startswith("/"):
+                    elif ":" in page.links[link] or not page.links[link].startswith("/"):
                         # Fully qualified path.
                         return NavigateAction(page.links[link])
                     else:
