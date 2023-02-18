@@ -51,15 +51,22 @@ class Navigation:
 
 
 class RendererCore:
-    def __init__(self, terminal: Terminal) -> None:
+    def __init__(self, terminal: Terminal, rows: int) -> None:
         self.terminal = terminal
+        self.rows = rows
+
+    def scrollUp(self) -> None:
+        pass
+
+    def scrollDown(self) -> None:
+        pass
 
 
 class TextRendererCore(RendererCore):
-    def __init__(self, terminal: Terminal) -> None:
-        super().__init__(terminal)
-
-        self.text = ""
+    def __init__(self, terminal: Terminal, rows: int) -> None:
+        super().__init__(terminal, rows)
+        self.text: List[str] = []
+        self.line: int = 0
 
     def wordWrap(self, text: str) -> str:
         # Make things easier to deal with.
@@ -156,31 +163,111 @@ class TextRendererCore(RendererCore):
 
     def displayText(self, text: str) -> None:
         # First, we need to wordwrap the text based on the terminal's width.
-        self.text = self.wordWrap(text)
+        text = self.wordWrap(text)
+        self.text = text.split("\n")
 
         # Control our scroll region, only erase the text we want.
+        # TODO: Calculate this based on self.rows and such.
         self.terminal.moveCursor(3, 1)
         self.terminal.setScrollRegion(3, self.terminal.rows - 2)
 
-        text = self.text
-        while text:
-            if "[" in text:
-                before, text = text.split("[", 1)
-                if "]" in text:
+        # Display the visible chunk of text.
+        self.line = 0
+        self._displayText(self.line, self.rows)
+
+        # No longer need scroll region protection.
+        self.terminal.clearScrollRegion()
+
+    def scrollUp(self) -> None:
+        if self.line > 0:
+            self.line -= 1
+
+            self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+            self.terminal.moveCursor(3, 1)
+            self.terminal.setScrollRegion(3, self.terminal.rows - 2)
+            self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
+            self._displayText(self.line, self.line + 1)
+            self.terminal.clearScrollRegion()
+            self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+    def scrollDown(self) -> None:
+        if self.line < (len(self.text) - self.rows):
+            self.line += 1
+
+            self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+            self.terminal.setScrollRegion(3, self.terminal.rows - 2)
+            self.terminal.moveCursor(self.terminal.rows - 2, 1)
+            self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
+            self._displayText(self.line + (self.rows - 1), self.line + self.rows)
+            self.terminal.clearScrollRegion()
+            self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+    def _displayText(self, startVisible: int, endVisible: int) -> None:
+        line = 0
+        linkDepth = 0
+        lastLine = min(self.rows + self.line, len(self.text), endVisible)
+        while line < lastLine:
+            # Grab the text itself, add a newline if we aren't the last line (don't want to scroll).
+            text = self.text[line]
+            if line != lastLine - 1:
+                text = text + "\n"
+            line += 1
+
+            while text:
+                openLinkPos = text.find("[")
+                closeLinkPos = text.find("]")
+
+                if openLinkPos < 0 and closeLinkPos < 0:
+                    # No links in this line.
+                    if line > startVisible:
+                        self.terminal.sendText(text)
+                    text = ""
+                elif openLinkPos >= 0 and closeLinkPos < 0:
+                    # Started a link in this line, but didn't end it.
+                    linkDepth += 1
+                    before, text = text.split("[", 1)
+
+                    if line > startVisible:
+                        self.terminal.sendText(before)
+                    if linkDepth == 1:
+                        # Only bold on the outermost link marker.
+                        self.terminal.sendCommand(Terminal.SET_BOLD)
+                    if line > startVisible:
+                        self.terminal.sendText("[")
+                elif (openLinkPos < 0 and closeLinkPos >= 0) or (
+                    closeLinkPos < openLinkPos
+                ):
+                    # Finished a link on in this line, but there's no second start or
+                    # the second start comes later.
                     after, text = text.split("]", 1)
 
-                    self.terminal.sendText(before)
-                    self.terminal.sendCommand(Terminal.SET_BOLD)
-                    self.terminal.sendText("[")
-                    self.terminal.sendText(after)
-                    self.terminal.sendText("]")
-                    self.terminal.sendCommand(Terminal.SET_NORMAL)
+                    if line > startVisible:
+                        self.terminal.sendText(after)
+                        self.terminal.sendText("]")
+                    if linkDepth == 1:
+                        self.terminal.sendCommand(Terminal.SET_NORMAL)
+
+                    linkDepth -= 1
                 else:
-                    self.terminal.sendText(before)
-                    self.terminal.sendText("[")
-            else:
-                self.terminal.sendText(text)
-                text = ""
+                    # There's an open and close on this line. Simply highlight it as-is. No need
+                    # to handle incrementing/decrementing the depth.
+                    before, text = text.split("[", 1)
+
+                    if line > startVisible:
+                        self.terminal.sendText(before)
+                    if linkDepth == 0:
+                        # Only bold on the outermost link marker.
+                        self.terminal.sendCommand(Terminal.SET_BOLD)
+                    if line > startVisible:
+                        self.terminal.sendText("[")
+
+                    after, text = text.split("]", 1)
+
+                    if line > startVisible:
+                        self.terminal.sendText(after)
+                        self.terminal.sendText("]")
+                    if linkDepth == 0:
+                        self.terminal.sendCommand(Terminal.SET_NORMAL)
 
 
 class Renderer:
@@ -189,7 +276,7 @@ class Renderer:
         self.input = ""
         self.page: Optional[Page] = None
         self.lastError = ""
-        self.renderer = RendererCore(terminal)
+        self.renderer = RendererCore(terminal, 20)
 
     def displayPage(self, page: Page) -> None:
         # Remember the page for going back to it for navigation.
@@ -205,18 +292,19 @@ class Renderer:
         self.terminal.sendCommand(Terminal.MOVE_CURSOR_ORIGIN)
 
         # Reset text display and put title up.
+        self.terminal.setAutoWrap()
         self.terminal.sendCommand(Terminal.SET_NORMAL)
         self.terminal.sendCommand(Terminal.SET_BOLD)
         self.terminal.sendText(f"{page.domain.root}:{page.path} -- {page.name}")
         self.terminal.sendCommand(Terminal.SET_NORMAL)
+        self.terminal.clearAutoWrap()
 
         # Render out the text of the page.
         if page.data.startswith("css"):
-            self.renderer = TextRendererCore(self.terminal)
+            self.renderer = TextRendererCore(self.terminal, 20)
             self.renderer.displayText(page.data[3:])
 
         # Move cursor to where we expect it for input.
-        self.terminal.clearScrollRegion()
         self.terminal.moveCursor(self.terminal.rows, 1)
 
     def clearInput(self) -> None:
@@ -262,9 +350,9 @@ class Renderer:
                 col += 1
                 self.terminal.moveCursor(row, col)
         elif inputVal == Terminal.UP:
-            raise Exception("Not implemented!")
+            self.renderer.scrollUp()
         elif inputVal == Terminal.DOWN:
-            raise Exception("Not implemented!")
+            self.renderer.scrollDown()
         elif inputVal == Terminal.BACKSPACE:
             if self.input:
                 # Just subtract from input.

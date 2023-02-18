@@ -12,6 +12,8 @@ class Terminal:
     REQUEST_CURSOR: bytes = b"[6n"
 
     MOVE_CURSOR_ORIGIN: bytes = b"[H"
+    MOVE_CURSOR_UP: bytes = b"M"
+    MOVE_CURSOR_DOWN: bytes = b"D"
 
     CLEAR_TO_ORIGIN: bytes = b"[1J"
     CLEAR_SCREEN: bytes = b"[2J"
@@ -48,6 +50,7 @@ class Terminal:
         self.checkOk()
 
         # Reset terminal.
+        self.sendCommand(self.TURN_OFF_REGION)
         self.sendCommand(self.CLEAR_SCREEN)
         self.sendCommand(self.MOVE_CURSOR_ORIGIN)
         self.sendCommand(self.SET_80_COLUMNS)
