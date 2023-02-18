@@ -1,5 +1,5 @@
 requests
-pyserial
+pySerial
 mypy
 flake8
 black

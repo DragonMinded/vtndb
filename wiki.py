@@ -15,30 +15,41 @@ class Metadata:
 class Page:
     def __init__(
         self,
+        domain: "Domain",
         name: str,
         path: str,
         back: Optional[str],
         data: str,
         links: List[str],
-        meta: Metadata,
+        metadata: Metadata,
     ) -> None:
+        self.domain = domain
         self.name = name
         self.path = path
         self.back = back
         self.data = data
         self.links = links
-        self.metadata = meta
+        self.metadata = metadata
 
 
 class Domain:
-    def __init__(
-        self, root: str, address: str, default: str, error: str, pages: List[Page]
-    ) -> None:
+    def __init__(self, root: str, address: str, default: str, error: str) -> None:
         self.root = root
         self.address = address
         self.default = default
         self.error = error
-        self.pages = pages
+        self.pages: List[Page] = []
+
+    def addPage(
+        self,
+        name: str,
+        path: str,
+        back: Optional[str],
+        data: str,
+        links: List[str],
+        metadata: Metadata,
+    ) -> None:
+        self.pages.append(Page(self, name, path, back, data, links, metadata))
 
 
 class Wiki:
@@ -69,11 +80,12 @@ class Wiki:
         self.domains: List[Domain] = []
 
         for entry in wikijson:
-            root = entry["path"]
-            address = entry["address"]
-            default = entry["defPage"]
-            error = entry["er2Page"]
-            pages = []
+            domain = Domain(
+                root=entry["path"],
+                address=entry["address"],
+                default=entry["defPage"],
+                error=entry["er2Page"],
+            )
 
             for page in entry["pages"]:
                 name = page["name"]
@@ -90,47 +102,36 @@ class Wiki:
                     modified=meta["editTime"],
                 )
 
-                pages.append(
-                    Page(
-                        name=name,
-                        path=path,
-                        back=back,
-                        data=data,
-                        links=links,
-                        meta=metadata,
-                    )
+                domain.addPage(
+                    name=name,
+                    path=path,
+                    back=back,
+                    data=data,
+                    links=links,
+                    metadata=metadata,
                 )
 
-            self.domains.append(
-                Domain(
-                    root=root,
-                    address=address,
-                    default=default,
-                    error=error,
-                    pages=pages,
-                )
-            )
+            self.domains.append(domain)
 
+        # Create a virtual page for connection errors.
         self.nonexistant = Domain(
             root="unspecified",
             address="00.00",
             default="/ERR",
             error="/ERR",
-            pages=[
-                Page(
-                    name="Connection Error",
-                    path="/ERR",
-                    back=None,
-                    data="css\n!Error #8: No connection.\n$Could not establish connection with specified server.",
-                    links=[],
-                    meta=Metadata(
-                        author="nobody",
-                        editor="nobody",
-                        created="never",
-                        modified="never",
-                    ),
-                ),
-            ],
+        )
+        self.nonexistant.addPage(
+            name="Connection Error",
+            path="/ERR",
+            back=None,
+            data="css\n!Error #8: No connection.\n$Could not establish connection with specified server.",
+            links=[],
+            metadata=Metadata(
+                author="nobody",
+                editor="nobody",
+                created="never",
+                modified="never",
+            ),
         )
 
     def getPage(self, uri: str) -> Page:
@@ -167,10 +168,3 @@ class Wiki:
             + uri
             + " resolves to a domain with no valid path and no valid error page!"
         )
-
-
-if __name__ == "__main__":
-    with open("web.json", "r") as fp:
-        wiki = Wiki("https://samhayzen.github.io/ndb-web/web.json")
-        page = wiki.getPage("NX.HELP:/MAIN/COMHELP")
-        print(page.data)
