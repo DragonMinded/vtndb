@@ -50,20 +50,150 @@ class Navigation:
         return self.wiki.getPage(self.stack[-1])
 
 
-class Rendering:
+class RendererCore:
     def __init__(self, terminal: Terminal) -> None:
         self.terminal = terminal
-        self.terminal.setAutoWrap()
+
+
+class TextRendererCore(RendererCore):
+    def __init__(self, terminal: Terminal) -> None:
+        super().__init__(terminal)
+
+        self.text = ""
+
+    def wordWrap(self, text: str) -> str:
+        # Make things easier to deal with.
+        text = text.replace("\r\n", "\n")
+
+        newText: str = ""
+        curLine: str = ""
+
+        def joinLines() -> None:
+            nonlocal newText
+            nonlocal curLine
+
+            if not curLine:
+                return
+
+            if not newText:
+                newText = curLine
+                curLine = ""
+            else:
+                if newText[-1] == "\n":
+                    newText = newText + curLine
+                    curLine = ""
+                else:
+                    newText = newText + "\n" + curLine
+                    curLine = ""
+
+        def spaceLeft() -> int:
+            nonlocal curLine
+
+            return self.terminal.columns - len(curLine)
+
+        while text:
+            if len(text) <= spaceLeft():
+                # Just append the end.
+                curLine += text
+                text = ""
+            else:
+                # First, if there's a newline somewhere, see if it falls within this line.
+                # if so, then just add everything up to and including it and move on.
+                newlinePos = text.find("\n")
+                if newlinePos >= 0:
+                    chunkLen = newlinePos + 1
+
+                    # We intentionally allow the newline to trail off because we don't auto-wrap,
+                    # so it's okay to "print" it at the end since the next word will be on the
+                    # new line anyway.
+                    if chunkLen <= (spaceLeft() + 1):
+                        curLine += text[:chunkLen]
+                        text = text[chunkLen:]
+                        joinLines()
+                        continue
+
+                # If we get here, our closest newline is on the next line somewhere (or beyond), or
+                # does not exist. So we need to find the first space character to determine that
+                # word's length.
+                spacePos = text.find(" ")
+                nextIsSpace = True
+                if spacePos < 0:
+                    # If we don't find a space, treat the entire rest of the text as a single word.
+                    spacePos = len(text)
+                    nextIsSpace = False
+
+                if spacePos < spaceLeft():
+                    # We have enough room to add the word AND the space.
+                    if nextIsSpace:
+                        curLine += text[: (spacePos + 1)]
+                        text = text[(spacePos + 1) :]
+                    else:
+                        curLine += text[:spacePos]
+                        text = text[spacePos:]
+                elif spacePos == spaceLeft():
+                    # We have enough room for the word but not the space, so add a newline instead.
+                    if nextIsSpace:
+                        curLine += text[:spacePos] + "\n"
+                        text = text[(spacePos + 1) :]
+                    else:
+                        curLine += text[:spacePos]
+                        text = text[spacePos:]
+                else:
+                    # We can't fit this, leave it for the next line if possible. However, if the
+                    # current line is empty, that means this word is longer than wrappable. In
+                    # that case, split it with a newline at the wrap point.
+                    if curLine:
+                        joinLines()
+                    else:
+                        width = spaceLeft()
+                        curLine += text[:width]
+                        text = text[width:]
+                        joinLines()
+
+        # Join the final line.
+        joinLines()
+        return newText
+
+    def displayText(self, text: str) -> None:
+        # First, we need to wordwrap the text based on the terminal's width.
+        self.text = self.wordWrap(text)
+
+        # Control our scroll region, only erase the text we want.
+        self.terminal.moveCursor(3, 1)
+        self.terminal.setScrollRegion(3, self.terminal.rows - 2)
+
+        text = self.text
+        while text:
+            if "[" in text:
+                before, text = text.split("[", 1)
+                if "]" in text:
+                    after, text = text.split("]", 1)
+
+                    self.terminal.sendText(before)
+                    self.terminal.sendCommand(Terminal.SET_BOLD)
+                    self.terminal.sendText("[")
+                    self.terminal.sendText(after)
+                    self.terminal.sendText("]")
+                    self.terminal.sendCommand(Terminal.SET_NORMAL)
+                else:
+                    self.terminal.sendText(before)
+                    self.terminal.sendText("[")
+            else:
+                self.terminal.sendText(text)
+                text = ""
+
+
+class Renderer:
+    def __init__(self, terminal: Terminal) -> None:
+        self.terminal = terminal
         self.input = ""
         self.page: Optional[Page] = None
         self.lastError = ""
+        self.renderer = RendererCore(terminal)
 
     def displayPage(self, page: Page) -> None:
+        # Remember the page for going back to it for navigation.
         self.page = page
-
-        data = page.data
-        if data.startswith("css"):
-            data = data[3:]
 
         # Render status bar at the bottom.
         self.clearInput()
@@ -80,28 +210,10 @@ class Rendering:
         self.terminal.sendText(f"{page.domain.root}:{page.path} -- {page.name}")
         self.terminal.sendCommand(Terminal.SET_NORMAL)
 
-        # Control our scroll region, only erase the text we want.
-        self.terminal.moveCursor(3, 1)
-        self.terminal.setScrollRegion(3, self.terminal.rows - 2)
-
-        while data:
-            if "[" in data:
-                before, data = data.split("[", 1)
-                if "]" in data:
-                    after, data = data.split("]", 1)
-
-                    self.terminal.sendText(before)
-                    self.terminal.sendCommand(Terminal.SET_BOLD)
-                    self.terminal.sendText("[")
-                    self.terminal.sendText(after)
-                    self.terminal.sendText("]")
-                    self.terminal.sendCommand(Terminal.SET_NORMAL)
-                else:
-                    self.terminal.sendText(before)
-                    self.terminal.sendText("[")
-            else:
-                self.terminal.sendText(data)
-                data = ""
+        # Render out the text of the page.
+        if page.data.startswith("css"):
+            self.renderer = TextRendererCore(self.terminal)
+            self.renderer.displayText(page.data[3:])
 
         # Move cursor to where we expect it for input.
         self.terminal.clearScrollRegion()
@@ -260,7 +372,7 @@ def main(port: str, baudrate: int) -> int:
     page = nav.navigate("NX.INDEX")
 
     terminal = Terminal(port, baudrate)
-    renderer = Rendering(terminal)
+    renderer = Renderer(terminal)
     renderer.displayPage(page)
 
     while True:
