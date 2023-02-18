@@ -181,7 +181,9 @@ class Rendering:
 
                     if link < 0 or link >= len(page.links):
                         self.displayError("Unknown link navigation request!")
-                    elif ":" in page.links[link] or not page.links[link].startswith("/"):
+                    elif ":" in page.links[link] or not page.links[link].startswith(
+                        "/"
+                    ):
                         # Fully qualified path.
                         return NavigateAction(page.links[link])
                     else:

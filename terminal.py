@@ -1,6 +1,6 @@
 import serial  # type: ignore
 import time
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 
 class Terminal:
@@ -41,7 +41,8 @@ class Terminal:
 
     def __init__(self, port: str, baud: int) -> None:
         self.serial = serial.Serial(port, baud, timeout=0.01)
-        self.pending = b""
+        self.leftover = b""
+        self.pending: List[bytes] = []
 
         # First, connect and figure out what's going on.
         self.checkOk()
@@ -112,17 +113,32 @@ class Terminal:
         self.sendCommand(self.TURN_OFF_REGION)
 
     def recvResponse(self, timeout: Optional[float] = None) -> bytes:
+        while True:
+            resp = self._recvResponseImpl(timeout)
+            if resp in {self.UP, self.DOWN, self.LEFT, self.RIGHT}:
+                self.pending.append(resp)
+            else:
+                return resp
+
+    def _recvResponseImpl(self, timeout: Optional[float]) -> bytes:
         gotResponse: bool = False
         accum: bytes = b""
 
         start = time.time()
         while True:
-            val = self.serial.read()
+            # Grab extra command bits from previous call to recvResponse first, then
+            # grab characters from the device itself.
+            if self.leftover:
+                val = self.leftover[0:1]
+                self.leftover = self.leftover[1:]
+            else:
+                val = self.serial.read()
+
             if not val:
                 if gotResponse or (timeout and (time.time() - start) > timeout):
                     # Got a full command here.
                     while accum and (accum[0:1] != self.ESCAPE):
-                        self.pending += accum[0:1]
+                        self.pending.append(accum[0:1])
                         accum = accum[1:]
 
                     if accum and accum[0:1] == self.ESCAPE:
@@ -146,9 +162,11 @@ class Terminal:
                                 b"?",
                                 b"[",
                             }:
-                                # This is the last character.
+                                # This is the last character, so everything after is going to
+                                # end up being the next response or some user input.
                                 if accum[offs + 1 :]:
-                                    self.pending += accum[offs + 1 :]
+                                    # Add the rest of the leftovers to be processed next time.
+                                    self.leftover += accum[offs + 1 :]
                                 return accum[: (offs + 1)]
 
                         raise Exception("Should have found end of command marker!")
@@ -165,16 +183,14 @@ class Terminal:
             accum += val
 
     def recvInput(self) -> Optional[bytes]:
-        # TODO: Possibly parse any command responses we got here.
-        escaped = self.recvResponse(timeout=0.01)
-        if escaped:
-            if escaped in {self.UP, self.DOWN, self.LEFT, self.RIGHT}:
-                return escaped
-            else:
-                raise Exception("Unhandled response " + str(escaped))
+        # Pump response queue to grab input between any escaped values. Skip
+        # that if we already have pending input since we don't need a round-trip.
+        if not self.pending:
+            self.recvResponse(timeout=0.01)
 
+        # See if we have anything pending.
         val: Optional[bytes] = None
         if self.pending:
-            val = self.pending[0:1]
+            val = self.pending[0]
             self.pending = self.pending[1:]
         return val
