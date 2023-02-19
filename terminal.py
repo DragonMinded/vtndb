@@ -53,6 +53,8 @@ class Terminal:
         self.serial = serial.Serial(port, baud, timeout=0.01)
         self.leftover = b""
         self.pending: List[bytes] = []
+        self.reversed = False
+        self.bolded = False
 
         # First, connect and figure out what's going on.
         self.checkOk()
@@ -84,6 +86,15 @@ class Terminal:
 
     def sendCommand(self, cmd: bytes) -> None:
         self.serial.write(self.ESCAPE)
+
+        if cmd == self.SET_NORMAL:
+            self.reversed = False
+            self.bolded = False
+        elif cmd == self.SET_REVERSE:
+            self.reversed = True
+        elif cmd == self.SET_BOLD:
+            self.bolded = True
+
         self.serial.write(cmd)
 
     def moveCursor(self, row: int, col: int) -> None:
@@ -140,6 +151,71 @@ class Terminal:
                     return alt(b"\x6D")
                 if data == "\u2518":
                     return alt(b"\x6A")
+
+                # Fill-drawing mapping hacks.
+                if data == "\u2591":
+                    if not self.bolded:
+                        # We can just display.
+                        return alt(b"\x6E")
+                    else:
+                        # We must un-bold for this special drawing character. Then, we must re-bold,
+                        # and possibly re-reverse if that was what was going on.
+                        return alt(
+                            self.ESCAPE
+                            + self.SET_NORMAL
+                            + (
+                                (self.ESCAPE + self.SET_REVERSE)
+                                if self.reversed
+                                else b""
+                            )
+                            + b"\x6E"
+                            + self.ESCAPE
+                            + self.SET_BOLD
+                        )
+                if data == "\u2592":
+                    if not self.bolded:
+                        # We can just display.
+                        return alt(b"\x61")
+                    else:
+                        # We must un-bold for this special drawing character. Then, we must re-bold,
+                        # and possibly re-reverse if that was what was going on.
+                        return alt(
+                            self.ESCAPE
+                            + self.SET_NORMAL
+                            + (
+                                (self.ESCAPE + self.SET_REVERSE)
+                                if self.reversed
+                                else b""
+                            )
+                            + b"\x61"
+                            + self.ESCAPE
+                            + self.SET_BOLD
+                        )
+                if data == "\u2593":
+                    if self.bolded:
+                        return alt(b"\x61")
+                    else:
+                        return alt(
+                            self.ESCAPE
+                            + self.SET_BOLD
+                            + b"\x61"
+                            + self.ESCAPE
+                            + self.SET_NORMAL
+                            + (
+                                (self.ESCAPE + self.SET_REVERSE)
+                                if self.reversed
+                                else b""
+                            )
+                        )
+                if data == "\u2588":
+                    return norm(
+                        self.ESCAPE
+                        + (self.SET_NORMAL if self.reversed else self.SET_REVERSE)
+                        + b" "
+                        + self.ESCAPE
+                        + (self.SET_REVERSE if self.reversed else self.SET_NORMAL)
+                        + ((self.ESCAPE + self.SET_BOLD) if self.bolded else b"")
+                    )
 
                 # +/- combined.
                 if data == "\xb1":
