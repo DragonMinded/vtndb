@@ -10,6 +10,9 @@ class TerminalException(Exception):
 class Terminal:
     ESCAPE: bytes = b"\x1B"
 
+    BOX_CHARSET: bytes = b"(0"
+    NORMAL_CHARSET: bytes = b"(B"
+
     REQUEST_STATUS: bytes = b"[5n"
     STATUS_OKAY: bytes = b"[0n"
 
@@ -98,13 +101,59 @@ class Terminal:
         return int(row), int(col)
 
     def sendText(self, text: str) -> None:
+        inAlt = False
+
+        def alt(char: bytes) -> bytes:
+            nonlocal inAlt
+
+            add = False
+            if not inAlt:
+                inAlt = True
+                add = True
+
+            return ((self.ESCAPE + self.BOX_CHARSET) if add else b"") + char
+
+        def norm(char: bytes) -> bytes:
+            nonlocal inAlt
+
+            add = False
+            if inAlt:
+                inAlt = False
+                add = True
+
+            return ((self.ESCAPE + self.NORMAL_CHARSET) if add else b"") + char
+
         def fb(data: str) -> bytes:
             try:
-                return data.encode("ascii")
+                return norm(data.encode("ascii"))
             except UnicodeEncodeError:
-                return b"+"
+                # Box drawing mappings to VT-100
+                if data == "\u2500":
+                    return alt(b"\x71")
+                if data == "\u2502":
+                    return alt(b"\x78")
+                if data == "\u250c":
+                    return alt(b"\x6C")
+                if data == "\u2510":
+                    return alt(b"\x6B")
+                if data == "\u2514":
+                    return alt(b"\x6D")
+                if data == "\u2518":
+                    return alt(b"\x6A")
 
+                # +/- combined.
+                if data == "\xb1":
+                    return alt(b"\x67")
+                # degrees
+                if data == "\xb0":
+                    return alt(b"\x66")
+
+                # Unknown unicode.
+                return alt(b"\x60")
+
+        self.sendCommand(self.NORMAL_CHARSET)
         self.serial.write(b"".join(fb(s) for s in text))
+        self.sendCommand(self.NORMAL_CHARSET)
 
     def setAutoWrap(self, value: bool = True) -> None:
         if value:

@@ -467,13 +467,14 @@ class Renderer:
             pass
         elif inputVal == b"\n":
             # Execute command.
-            if not self.input:
+            actual = self.input.strip()
+            if not actual:
                 return None
 
-            if self.input[0] == "!":
+            if actual[0] == "!":
                 # Link navigation.
                 try:
-                    link = int(self.input[1:])
+                    link = int(actual[1:])
                     link -= 1
 
                     if link < 0 or link >= len(page.links):
@@ -488,13 +489,13 @@ class Renderer:
                         return NavigateAction(f"{page.domain.root}:{page.links[link]}")
                 except ValueError:
                     self.displayError("Invalid link navigation request!")
-            elif self.input == "back":
+            elif actual == "back":
                 return BackAction()
-            elif self.input.startswith("goto"):
-                if " " not in self.input:
+            elif actual.startswith("goto"):
+                if " " not in actual:
                     self.displayError("No page requested!")
                 else:
-                    _, newpage = self.input.split(" ", 1)
+                    _, newpage = actual.split(" ", 1)
                     newpage = newpage.strip()
 
                     if ":" in newpage or not newpage.startswith("/"):
@@ -503,19 +504,19 @@ class Renderer:
                     else:
                         # Assume current domain.
                         return NavigateAction(f"{page.domain.root}:{newpage}")
-            elif self.input == "home":
+            elif actual == "home":
                 return HomeAction()
-            elif self.input == "next":
+            elif actual == "next":
                 self.clearInput()
                 self.renderer.pageDown()
-            elif self.input == "prev":
+            elif actual == "prev":
                 self.clearInput()
                 self.renderer.pageUp()
-            elif self.input.startswith("set"):
-                if " " not in self.input:
+            elif actual.startswith("set"):
+                if " " not in actual:
                     self.displayError("No setting requested!")
                 else:
-                    _, setting = self.input.split(" ", 1)
+                    _, setting = actual.split(" ", 1)
                     setting = setting.strip()
 
                     if "=" in setting:
@@ -527,11 +528,11 @@ class Renderer:
                         value = None
 
                     return SettingAction(setting, value)
-            elif self.input.startswith("cd"):
-                if " " not in self.input:
+            elif actual.startswith("cd"):
+                if " " not in actual:
                     self.displayError("No directory specified!")
                 else:
-                    _, newdir = self.input.split(" ", 1)
+                    _, newdir = actual.split(" ", 1)
                     newdir = newdir.strip()
 
                     newpage = os.path.abspath(os.path.join(page.path, newdir))
@@ -540,7 +541,7 @@ class Renderer:
 
                     return NavigateAction(f"{page.domain.root}:{newpage}")
             else:
-                self.displayError(f"Unrecognized command {self.input}")
+                self.displayError(f"Unrecognized command {actual}")
         else:
             # Just add to input.
             row, col = self.terminal.fetchCursor()
