@@ -430,6 +430,7 @@ class Renderer:
                 row, col = self.terminal.fetchCursor()
 
                 if col == len(self.input) + 1:
+                    # Erasing at the end of the line.
                     self.input = self.input[:-1]
 
                     col -= 1
@@ -437,8 +438,30 @@ class Renderer:
                     self.terminal.sendCommand(Terminal.SET_REVERSE)
                     self.terminal.sendText(" ")
                     self.terminal.moveCursor(row, col)
+                elif col == 1:
+                    # Erasing at the beginning, do nothing.
+                    pass
+                elif col == 2:
+                    # Erasing at the beginning of the line.
+                    self.input = self.input[1:]
+
+                    col -= 1
+                    self.terminal.moveCursor(row, col)
+                    self.terminal.sendCommand(Terminal.SET_REVERSE)
+                    self.terminal.sendText(self.input)
+                    self.terminal.sendText(" ")
+                    self.terminal.moveCursor(row, col)
                 else:
-                    raise Exception("Not implemented!")
+                    # Erasing in the middle of the line.
+                    spot = col - 2
+                    self.input = self.input[:spot] + self.input[(spot + 1):]
+
+                    col -= 1
+                    self.terminal.moveCursor(row, col)
+                    self.terminal.sendCommand(Terminal.SET_REVERSE)
+                    self.terminal.sendText(self.input[spot:])
+                    self.terminal.sendText(" ")
+                    self.terminal.moveCursor(row, col)
         elif inputVal == b"\r":
             # Ignore this.
             pass
