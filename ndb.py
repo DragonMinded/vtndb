@@ -367,7 +367,7 @@ class Renderer:
         # Render out the text of the page.
         if page.data.startswith("css"):
             self.renderer = TextRendererCore(self.terminal, 3, self.terminal.rows - 2)
-            self.renderer.displayText(page.data[3:])
+            self.renderer.displayText("\n".join(page.data[3:].split("css")))
 
         # Move cursor to where we expect it for input.
         self.terminal.moveCursor(self.terminal.rows, 1)
