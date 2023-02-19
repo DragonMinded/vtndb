@@ -47,12 +47,14 @@ class Terminal:
     DOWN: bytes = b"[B"
     LEFT: bytes = b"[D"
     RIGHT: bytes = b"[C"
-    BACKSPACE: bytes = b"\x7F"
+    BACKSPACE: bytes = b"\x08"
+    DELETE: bytes = b"\x7F"
 
     def __init__(self, port: str, baud: int) -> None:
         self.serial = serial.Serial(port, baud, timeout=0.01)
         self.leftover = b""
         self.pending: List[bytes] = []
+        self.responses: List[bytes] = []
         self.reversed = False
         self.bolded = False
 
@@ -102,11 +104,17 @@ class Terminal:
 
     def fetchCursor(self) -> Tuple[int, int]:
         self.sendCommand(self.REQUEST_CURSOR)
-        resp = self.recvResponse()
-        if resp[:1] != b"[" or resp[-1:] != b"R":
-            raise TerminalException(
-                "Invalid response for cursor fetch " + resp.decode("ascii")
-            )
+        while True:
+            resp = self.recvResponse()
+            if not resp:
+                # Ran out of responses, try sending the command again.
+                self.sendCommand(self.REQUEST_CURSOR)
+            elif resp[:1] != b"[" or resp[-1:] != b"R":
+                # Manual escape sequence sent by user? Swallow and read next.
+                continue
+            else:
+                # Got a valid response!
+                break
         respstr = resp[1:-1].decode("ascii")
         row, col = respstr.split(";", 1)
         return int(row), int(col)
@@ -248,6 +256,18 @@ class Terminal:
         self.sendCommand(self.TURN_OFF_REGION)
 
     def recvResponse(self, timeout: Optional[float] = None) -> bytes:
+        # Fetch the last received response in the input loop, or if that is empty,
+        # attempt to read the next response from the serial terminal.
+        if self.responses:
+            response = self.responses[0]
+            self.responses = self.responses[1:]
+        else:
+            response = self._recvResponse(timeout)
+        return response
+
+    def _recvResponse(self, timeout: Optional[float]) -> bytes:
+        # Attempt to read the next response from the serial terminal, handling escaped
+        # arrowkeys as inputs as apposed to command responses.
         while True:
             resp = self._recvResponseImpl(timeout)
             if resp in {self.UP, self.DOWN, self.LEFT, self.RIGHT}:
@@ -256,6 +276,8 @@ class Terminal:
                 return resp
 
     def _recvResponseImpl(self, timeout: Optional[float]) -> bytes:
+        # Attempt to read from serial until we have a valid escaped response. All non
+        # escaped responses will be placed into the user input buffer.
         gotResponse: bool = False
         accum: bytes = b""
 
@@ -303,11 +325,10 @@ class Terminal:
                                 self.leftover += accum[offs + 1 :]
                                 return accum[: (offs + 1)]
 
-                        # It's possible we would get this in the future, but I'm not sure since I haven't
-                        # encountered this ever.
-                        raise TerminalException(
-                            "Should have found end of command marker but didn't!"
-                        )
+                        # This can happen if the user presses the "ESC" key which sends the escape
+                        # sequence raw with nothing else available. Requeue this escape key and the
+                        # rest of the accum and hope the user presses something else next.
+                        self.leftover += self.ESCAPE + accum
                     else:
                         accum = b""
                         if timeout:
@@ -320,11 +341,20 @@ class Terminal:
             gotResponse = True
             accum += val
 
+    def peekInput(self) -> Optional[bytes]:
+        # Simply return the next input, or None if there is nothing pending.
+        if self.pending:
+            return self.pending[0]
+
+        return None
+
     def recvInput(self) -> Optional[bytes]:
         # Pump response queue to grab input between any escaped values. Skip
         # that if we already have pending input since we don't need a round-trip.
         if not self.pending:
-            self.recvResponse(timeout=0.01)
+            response = self._recvResponse(timeout=0.01)
+            if response:
+                self.responses.append(response)
 
         # See if we have anything pending.
         val: Optional[bytes] = None

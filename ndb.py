@@ -424,7 +424,7 @@ class Renderer:
             self.renderer.scrollUp()
         elif inputVal == Terminal.DOWN:
             self.renderer.scrollDown()
-        elif inputVal == Terminal.BACKSPACE:
+        elif inputVal in {Terminal.BACKSPACE, Terminal.DELETE}:
             if self.input:
                 # Just subtract from input.
                 row, col = self.terminal.fetchCursor()
@@ -575,7 +575,14 @@ def main(port: str, baudrate: int) -> int:
     renderer.displayPage(page)
 
     while True:
+        # Grab input, de-duplicate held down up/down presses so they don't queue up.
+        # This can cause the entire message loop to desync as we pile up requests to
+        # scroll the screen, ultimately leading in rendering issues and a crash.
         inputVal = terminal.recvInput()
+        if inputVal in {Terminal.UP, Terminal.DOWN}:
+            while inputVal == terminal.peekInput():
+                terminal.recvInput()
+
         if inputVal:
             action = renderer.processInput(inputVal)
             if isinstance(action, NavigateAction):
