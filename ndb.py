@@ -30,6 +30,10 @@ class SettingAction(Action):
         self.value = value
 
 
+class NavigationException(Exception):
+    pass
+
+
 class Navigation:
     def __init__(self, wiki: Wiki) -> None:
         self.wiki = wiki
@@ -44,7 +48,9 @@ class Navigation:
 
     def back(self) -> Page:
         if not self.canGoBack():
-            raise Exception("Nothing to go back to!")
+            raise NavigationException(
+                "Nothing to go back to, check canGoBack before calling this!"
+            )
 
         self.stack = self.stack[:-1]
         return self.wiki.getPage(self.stack[-1])

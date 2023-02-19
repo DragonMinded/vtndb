@@ -4,6 +4,10 @@ from typing import List, Optional
 from urllib.parse import urlparse
 
 
+class WikiException(Exception):
+    pass
+
+
 class Metadata:
     def __init__(self, author: str, editor: str, created: str, modified: str) -> None:
         self.author = author
@@ -163,7 +167,7 @@ class Wiki:
             if page.path == found.error:
                 return page
 
-        raise Exception(
+        raise WikiException(
             "Path "
             + uri
             + " resolves to a domain with no valid path and no valid error page!"

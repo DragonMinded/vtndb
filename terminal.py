@@ -3,6 +3,10 @@ import time
 from typing import List, Optional, Tuple
 
 
+class TerminalException(Exception):
+    pass
+
+
 class Terminal:
     ESCAPE: bytes = b"\x1B"
 
@@ -62,8 +66,8 @@ class Terminal:
 
     def checkOk(self) -> None:
         self.sendCommand(self.REQUEST_STATUS)
-        if self.recvResponse() != self.STATUS_OKAY:
-            raise Exception("Terminal is not okay!")
+        if self.recvResponse(1.0) != self.STATUS_OKAY:
+            raise TerminalException("Terminal did not respond okay!")
 
     def set132Columns(self) -> None:
         self.sendCommand(self.SET_132_COLUMNS)
@@ -86,7 +90,9 @@ class Terminal:
         self.sendCommand(self.REQUEST_CURSOR)
         resp = self.recvResponse()
         if resp[:1] != b"[" or resp[-1:] != b"R":
-            raise Exception("Invalid response for cursor fetch!")
+            raise TerminalException(
+                "Invalid response for cursor fetch " + resp.decode("ascii")
+            )
         respstr = resp[1:-1].decode("ascii")
         row, col = respstr.split(";", 1)
         return int(row), int(col)
@@ -172,7 +178,11 @@ class Terminal:
                                 self.leftover += accum[offs + 1 :]
                                 return accum[: (offs + 1)]
 
-                        raise Exception("Should have found end of command marker!")
+                        # It's possible we would get this in the future, but I'm not sure since I haven't
+                        # encountered this ever.
+                        raise TerminalException(
+                            "Should have found end of command marker but didn't!"
+                        )
                     else:
                         accum = b""
                         if timeout:
