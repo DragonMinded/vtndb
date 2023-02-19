@@ -506,6 +506,8 @@ class Renderer:
                         return NavigateAction(f"{page.domain.root}:{newpage}")
             elif actual == "home":
                 return HomeAction()
+            elif actual == "root":
+                return NavigateAction(page.domain.root)
             elif actual == "next":
                 self.clearInput()
                 self.renderer.pageDown()
