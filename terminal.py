@@ -16,6 +16,7 @@ class Terminal:
     MOVE_CURSOR_DOWN: bytes = b"D"
 
     CLEAR_TO_ORIGIN: bytes = b"[1J"
+    CLEAR_TO_END_OF_LINE: bytes = b"[0K"
     CLEAR_SCREEN: bytes = b"[2J"
     CLEAR_LINE: bytes = b"[2K"
 
@@ -167,9 +168,8 @@ class Terminal:
                             }:
                                 # This is the last character, so everything after is going to
                                 # end up being the next response or some user input.
-                                if accum[offs + 1 :]:
-                                    # Add the rest of the leftovers to be processed next time.
-                                    self.leftover += accum[offs + 1 :]
+                                # Add the rest of the leftovers to be processed next time.
+                                self.leftover += accum[offs + 1 :]
                                 return accum[: (offs + 1)]
 
                         raise Exception("Should have found end of command marker!")

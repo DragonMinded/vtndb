@@ -63,6 +63,12 @@ class RendererCore:
     def scrollDown(self) -> None:
         pass
 
+    def pageUp(self) -> None:
+        pass
+
+    def pageDown(self) -> None:
+        pass
+
 
 class TextRendererCore(RendererCore):
     def __init__(self, terminal: Terminal, top: int, bottom: int) -> None:
@@ -172,9 +178,10 @@ class TextRendererCore(RendererCore):
         self.terminal.moveCursor(self.top, 1)
         self.terminal.setScrollRegion(self.top, self.bottom)
 
-        # Display the visible chunk of text.
+        # Display the visible chunk of text. For an initial draw, we're good
+        # relying on our parent renderer to have cleared the viewport.
         self.line = 0
-        self._displayText(self.line, self.rows)
+        self._displayText(self.line, self.line + self.rows, False)
 
         # No longer need scroll region protection.
         self.terminal.clearScrollRegion()
@@ -184,10 +191,11 @@ class TextRendererCore(RendererCore):
             self.line -= 1
 
             self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+            self.terminal.sendCommand(Terminal.SET_NORMAL)
             self.terminal.moveCursor(self.top, 1)
             self.terminal.setScrollRegion(self.top, self.bottom)
             self.terminal.sendCommand(Terminal.MOVE_CURSOR_UP)
-            self._displayText(self.line, self.line + 1)
+            self._displayText(self.line, self.line + 1, False)
             self.terminal.clearScrollRegion()
             self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
@@ -196,22 +204,59 @@ class TextRendererCore(RendererCore):
             self.line += 1
 
             self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+            self.terminal.sendCommand(Terminal.SET_NORMAL)
             self.terminal.setScrollRegion(self.top, self.bottom)
             self.terminal.moveCursor(self.bottom, 1)
             self.terminal.sendCommand(Terminal.MOVE_CURSOR_DOWN)
-            self._displayText(self.line + (self.rows - 1), self.line + self.rows)
+            self._displayText(self.line + (self.rows - 1), self.line + self.rows, False)
             self.terminal.clearScrollRegion()
             self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
-    def _displayText(self, startVisible: int, endVisible: int) -> None:
+    def pageUp(self) -> None:
+        line = self.line - (self.rows - 1)
+        if line < 0:
+            line = 0
+
+        if line != self.line:
+            self.line = line
+
+            # Gotta redraw the whole thing.
+            self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+            self.terminal.sendCommand(Terminal.SET_NORMAL)
+            self.terminal.moveCursor(self.top, 1)
+            self.terminal.setScrollRegion(self.top, self.bottom)
+            self._displayText(self.line, self.line + self.rows, True)
+            self.terminal.clearScrollRegion()
+            self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+    def pageDown(self) -> None:
+        line = self.line + (self.rows - 1)
+        if line > (len(self.text) - self.rows):
+            line = len(self.text) - self.rows
+
+        if line != self.line:
+            self.line = line
+
+            # Gotta redraw the whole thing.
+            self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+            self.terminal.sendCommand(Terminal.SET_NORMAL)
+            self.terminal.moveCursor(self.top, 1)
+            self.terminal.setScrollRegion(self.top, self.bottom)
+            self._displayText(self.line, self.line + self.rows, True)
+            self.terminal.clearScrollRegion()
+            self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+    def _displayText(
+        self, startVisible: int, endVisible: int, wipeNonText: bool
+    ) -> None:
+        displayed = 0
         line = 0
         linkDepth = 0
         lastLine = min(self.rows + self.line, len(self.text), endVisible)
         while line < lastLine:
             # Grab the text itself, add a newline if we aren't the last line (don't want to scroll).
             text = self.text[line]
-            if line != lastLine - 1:
-                text = text + "\n"
+            needsClear = wipeNonText and (len(text) < self.terminal.columns)
             line += 1
 
             while text:
@@ -269,6 +314,25 @@ class TextRendererCore(RendererCore):
                         self.terminal.sendText("]")
                     if linkDepth == 0:
                         self.terminal.sendCommand(Terminal.SET_NORMAL)
+
+            if line > startVisible:
+                displayed += 1
+
+                if needsClear:
+                    self.terminal.sendCommand(Terminal.CLEAR_TO_END_OF_LINE)
+
+                if line != lastLine:
+                    self.terminal.sendText("\n")
+
+        if wipeNonText:
+            clearAmount = endVisible - startVisible
+            while displayed < clearAmount:
+                self.terminal.sendCommand(Terminal.CLEAR_LINE)
+
+                if displayed < (self.rows - 1):
+                    self.terminal.sendText("\n")
+
+                displayed += 1
 
 
 class Renderer:
@@ -412,6 +476,12 @@ class Renderer:
                         return NavigateAction(f"{page.domain.root}:{newpage}")
             elif self.input == "home":
                 return HomeAction()
+            elif self.input == "next":
+                self.clearInput()
+                self.renderer.pageDown()
+            elif self.input == "prev":
+                self.clearInput()
+                self.renderer.pageUp()
             elif self.input.startswith("set"):
                 if " " not in self.input:
                     self.displayError("No setting requested!")
