@@ -454,7 +454,7 @@ class Renderer:
                 else:
                     # Erasing in the middle of the line.
                     spot = col - 2
-                    self.input = self.input[:spot] + self.input[(spot + 1):]
+                    self.input = self.input[:spot] + self.input[(spot + 1) :]
 
                     col -= 1
                     self.terminal.moveCursor(row, col)
@@ -547,11 +547,18 @@ class Renderer:
             char = inputVal.decode("ascii")
 
             if col == len(self.input) + 1:
+                # Just appending to the input.
                 self.input += char
                 self.terminal.sendCommand(Terminal.SET_REVERSE)
                 self.terminal.sendText(char)
             else:
-                raise Exception("Not implemented!")
+                # Adding to mid-input.
+                spot = col - 1
+                self.input = self.input[:spot] + char + self.input[spot:]
+
+                self.terminal.sendCommand(Terminal.SET_REVERSE)
+                self.terminal.sendText(self.input[spot:])
+                self.terminal.moveCursor(row, col + 1)
 
         # Nothing happening here!
         return None
