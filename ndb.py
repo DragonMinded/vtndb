@@ -1,5 +1,6 @@
 import argparse
 import os
+import random
 import sys
 from typing import List, Optional
 
@@ -21,6 +22,18 @@ class BackAction(Action):
 
 
 class HomeAction(Action):
+    pass
+
+
+class HelpAction(Action):
+    pass
+
+
+class RandomAction(Action):
+    pass
+
+
+class ExitAction(Action):
     pass
 
 
@@ -374,6 +387,84 @@ class Renderer:
         if page.data.startswith("css"):
             self.renderer = TextRendererCore(self.terminal, 3, self.terminal.rows - 2)
             self.renderer.displayText("\n".join(page.data[3:].split("css")))
+        elif page.data.startswith("int"):
+            pagetype = page.data[3:]
+            if pagetype == "help":
+                commands = {
+                    "goto": (
+                        "PATH",
+                        'Navigate directly to a specified path, such as "NX.HELP:/MAIN". For a more complete '
+                        + "description please read the online [!1 Command Help].",
+                    ),
+                    "cd": (
+                        "RELPATH",
+                        'Navigate to a new path on the server relative to this one, such as ".." to navigate up one level.',
+                    ),
+                    "home": (
+                        None,
+                        "Navigate to the pre-configured system home page.",
+                    ),
+                    "root": (
+                        None,
+                        "Navigate to the default page of the current domain.",
+                    ),
+                    "back": (
+                        None,
+                        "Navigate to the previous page that was displayed before loading the current page.",
+                    ),
+                    "random": (
+                        None,
+                        "Navigate to a completely random page on a GCP server.",
+                    ),
+                    "prev": (
+                        None,
+                        "Scroll up one screen's worth of text on the current page.",
+                    ),
+                    "next": (
+                        None,
+                        "Scroll down one screen's worth of text on the current page.",
+                    ),
+                    "set": (
+                        "SETTING=VALUE",
+                        "Change the value for one of the following settings:\n"
+                        + '         * columns - Change the number of columns. Supports "80" and "132".',
+                    ),
+                    "help": (
+                        None,
+                        "Display this help screen.",
+                    ),
+                    "exit": (
+                        None,
+                        "Exit out of the browser interface.",
+                    ),
+                }
+
+                helpsections = [
+                    "The following commands are available to use at any time:",
+                    *[
+                        f"    {name}{' [' + args + ']' if args else ''}\n        {desc}"
+                        for name, (args, desc) in commands.items()
+                    ],
+                ]
+
+                self.renderer = TextRendererCore(
+                    self.terminal, 3, self.terminal.rows - 2
+                )
+                self.renderer.displayText("\n\n".join(helpsections))
+            elif pagetype == "connerr":
+                self.renderer = TextRendererCore(
+                    self.terminal, 3, self.terminal.rows - 2
+                )
+                self.renderer.displayText(
+                    "\n".join(
+                        [
+                            "!Error #8: No connection.",
+                            "$Could not establish connection with specified server.",
+                        ]
+                    )
+                )
+        else:
+            raise NotImplementedError("Page type is unimplemented!")
 
         # Move cursor to where we expect it for input.
         self.terminal.moveCursor(self.terminal.rows, 1)
@@ -508,6 +599,12 @@ class Renderer:
                 return HomeAction()
             elif actual == "root":
                 return NavigateAction(page.domain.root)
+            elif actual == "help":
+                return HelpAction()
+            elif actual == "random":
+                return RandomAction()
+            elif actual == "exit":
+                return ExitAction()
             elif actual == "next":
                 self.clearInput()
                 self.renderer.pageDown()
@@ -599,6 +696,7 @@ def main(port: str, baudrate: int) -> int:
                     renderer.displayPage(page)
                 else:
                     renderer.clearInput()
+                    renderer.displayError("No previous page!")
             elif isinstance(action, SettingAction):
                 if action.setting in {"cols", "columns"}:
                     if action.value not in {"80", "132"}:
@@ -619,7 +717,18 @@ def main(port: str, baudrate: int) -> int:
                             renderer.clearInput()
                 else:
                     renderer.displayError(f"Unrecognized setting {action.setting}")
+            elif isinstance(action, RandomAction):
+                randomPage = random.choice(wiki.getAllPages())
+                page = nav.navigate(f"{randomPage.domain.root}:{randomPage.path}")
+                renderer.displayPage(page)
+            elif isinstance(action, HelpAction):
+                page = nav.navigate("LOCAL.HELP")
+                renderer.displayPage(page)
+            elif isinstance(action, ExitAction):
+                break
 
+    # Restore the screen before exiting.
+    terminal.sendCommand(Terminal.CLEAR_SCREEN)
     return 0
 
 

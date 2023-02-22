@@ -119,17 +119,38 @@ class Wiki:
 
         # Create a virtual page for connection errors.
         self.nonexistant = Domain(
-            root="unspecified",
+            root="LOCAL.ERR",
             address="00.00",
-            default="/ERR",
-            error="/ERR",
+            default="",
+            error="",
         )
         self.nonexistant.addPage(
             name="Connection Error",
-            path="/ERR",
+            path="",
             back=None,
-            data="css\n!Error #8: No connection.\n$Could not establish connection with specified server.",
+            data="intconnerr",
             links=[],
+            metadata=Metadata(
+                author="nobody",
+                editor="nobody",
+                created="never",
+                modified="never",
+            ),
+        )
+
+        # Create a virtual page for command help.
+        self.help = Domain(
+            root="LOCAL.HELP",
+            address="00.00",
+            default="",
+            error="",
+        )
+        self.help.addPage(
+            name="Command Line Help",
+            path="",
+            back=None,
+            data="inthelp",
+            links=["NX.HELP:/MAIN/COMHELP"],
             metadata=Metadata(
                 author="nobody",
                 editor="nobody",
@@ -149,7 +170,7 @@ class Wiki:
         found = self.nonexistant
         found.root = domain
 
-        for existing in self.domains:
+        for existing in [*self.domains, self.help]:
             if existing.root == domain:
                 found = existing
                 break
@@ -172,3 +193,11 @@ class Wiki:
             + uri
             + " resolves to a domain with no valid path and no valid error page!"
         )
+
+    def getAllPages(self) -> List[Page]:
+        pages: List[Page] = []
+
+        for domain in self.domains:
+            pages.extend(p for p in domain.pages if p.path != domain.error)
+
+        return pages

@@ -5,6 +5,8 @@ Check out a short video demonstration: https://www.youtube.com/watch?v=XHgMCN_gB
 What works:
  - Direct page navigation with "goto", loading the homepage with "home", loading the default page of the current domain with "root".
  - Following links using "!" syntax, navigating to the previous page with "back", navigating up with "cd ..".
+ - Navigating to random pages using "random".
+ - Displaying local command help using the "help" command.
  - Full editing of commands using arrow keys, backspace and all alphanumeric inputs on the VT-100.
  - Scrolling with the arrow keys as well as page up with "prev" and page down with "next".
  - Link highlighting, map drawing and box drawing are mapped to VT-100 character sets.
@@ -12,4 +14,3 @@ What works:
 What doesn't work (yet):
  - Search feature is unimplemented.
  - Dictionary feature is unimplemented.
- - Inability to exit out of controlling program to return control to another program.
