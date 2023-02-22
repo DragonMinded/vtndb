@@ -379,17 +379,28 @@ class Renderer:
         self.terminal.setAutoWrap()
         self.terminal.sendCommand(Terminal.SET_NORMAL)
         self.terminal.sendCommand(Terminal.SET_BOLD)
-        self.terminal.sendText(f"{page.domain.root}:{page.path} -- {page.name}")
+        self.terminal.sendText(f"{page.domain.root}:{page.path}")
+        if page.extension and page.extension != "INT":
+            self.terminal.sendText(f".{page.extension}")
+        if page.name:
+            self.terminal.sendText(f" -- {page.name}")
         self.terminal.sendCommand(Terminal.SET_NORMAL)
         self.terminal.clearAutoWrap()
 
         # Render out the text of the page.
-        if page.data.startswith("css"):
-            self.renderer = TextRendererCore(self.terminal, 3, self.terminal.rows - 2)
-            self.renderer.displayText("\n".join(page.data[3:].split("css")))
-        elif page.data.startswith("int"):
-            pagetype = page.data[3:]
-            if pagetype == "help":
+        if page.extension in {"", "TEXT", "DOUB"}:
+            if page.data in {"Void", "void", "[Unwritten]"}:
+                self.renderer = TextRendererCore(
+                    self.terminal, 3, self.terminal.rows - 2
+                )
+                self.renderer.displayText("\n[Unwritten]")
+            else:
+                self.renderer = TextRendererCore(
+                    self.terminal, 3, self.terminal.rows - 2
+                )
+                self.renderer.displayText("\n".join(page.data.split("css")))
+        elif page.extension == "INT":
+            if page.data == "help":
                 commands = {
                     "goto": (
                         "PATH",
@@ -451,7 +462,7 @@ class Renderer:
                     self.terminal, 3, self.terminal.rows - 2
                 )
                 self.renderer.displayText("\n\n".join(helpsections))
-            elif pagetype == "connerr":
+            elif page.data == "connerr":
                 self.renderer = TextRendererCore(
                     self.terminal, 3, self.terminal.rows - 2
                 )
@@ -464,7 +475,7 @@ class Renderer:
                     )
                 )
         else:
-            raise NotImplementedError("Page type is unimplemented!")
+            raise NotImplementedError(f"Page type {page.extension} is unimplemented!")
 
         # Move cursor to where we expect it for input.
         self.terminal.moveCursor(self.terminal.rows, 1)

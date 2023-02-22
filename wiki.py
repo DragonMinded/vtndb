@@ -1,6 +1,6 @@
 import json
 import requests
-from typing import List, Optional
+from typing import List, Optional, Set
 from urllib.parse import urlparse
 
 
@@ -22,6 +22,7 @@ class Page:
         domain: "Domain",
         name: str,
         path: str,
+        extension: str,
         back: Optional[str],
         data: str,
         links: List[str],
@@ -30,6 +31,7 @@ class Page:
         self.domain = domain
         self.name = name
         self.path = path
+        self.extension = extension
         self.back = back
         self.data = data
         self.links = links
@@ -48,12 +50,15 @@ class Domain:
         self,
         name: str,
         path: str,
+        extension: str,
         back: Optional[str],
         data: str,
         links: List[str],
         metadata: Metadata,
     ) -> None:
-        self.pages.append(Page(self, name, path, back, data, links, metadata))
+        self.pages.append(
+            Page(self, name, path, extension, back, data, links, metadata)
+        )
 
 
 class Wiki:
@@ -83,6 +88,10 @@ class Wiki:
         # Now, grab the top level domains.
         self.domains: List[Domain] = []
 
+        # There are some duplicates, which we don't want appearing in random, so filter them
+        # out.
+        seenPages: Set[str] = set()
+
         for entry in wikijson:
             domain = Domain(
                 root=entry["path"],
@@ -91,12 +100,22 @@ class Wiki:
                 error=entry["er2Page"],
             )
 
+            # Things that we honestly don't need around.
+            if domain.root in {"TESTDOMAIN"}:
+                continue
+
             for page in entry["pages"]:
                 name = page["name"]
                 path = page["path"]
+                extension = page["extension"]
                 back = page.get("backpath")
                 data = page["data"]
                 links = [str(s) for s in page["links"]]
+
+                full_path = f"{domain.root}:{path}"
+                if full_path in seenPages:
+                    continue
+                seenPages.add(full_path)
 
                 meta = page["meta"]
                 metadata = Metadata(
@@ -109,6 +128,7 @@ class Wiki:
                 domain.addPage(
                     name=name,
                     path=path,
+                    extension=extension,
                     back=back,
                     data=data,
                     links=links,
@@ -127,8 +147,9 @@ class Wiki:
         self.nonexistant.addPage(
             name="Connection Error",
             path="",
+            extension="INT",
             back=None,
-            data="intconnerr",
+            data="connerr",
             links=[],
             metadata=Metadata(
                 author="nobody",
@@ -148,8 +169,9 @@ class Wiki:
         self.help.addPage(
             name="Command Line Help",
             path="",
+            extension="INT",
             back=None,
-            data="inthelp",
+            data="help",
             links=["NX.HELP:/MAIN/COMHELP"],
             metadata=Metadata(
                 author="nobody",

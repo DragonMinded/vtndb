@@ -12,5 +12,11 @@ What works:
  - Link highlighting, map drawing and box drawing are mapped to VT-100 character sets.
 
 What doesn't work (yet):
- - Search feature is unimplemented.
- - Dictionary feature is unimplemented.
+ - Search feature is unimplemented (SRCH extension).
+ - Dictionary feature is unimplemented (DICT extension).
+ - Calendar feature is unimplemented (CLND/CLDR extension).
+ - As a result, the following pages do not render properly:
+   - "EQ.NETPEDIA:/SEARCH"
+   - "EQ.NETPEDIA:/ROOT/CALENDAR/CALENDAR"
+   - "EQ.NETPEDIA:/ROOT/CULTURE/LANGUAGE/NUNWEI/DICTIONARY"
+   - "EQ.NETPEDIA:/ROOT/CULTURE/LANGUAGE/DEORIAN/PROTO/DICTIONARY"
