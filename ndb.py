@@ -92,6 +92,12 @@ class RendererCore:
     def pageDown(self) -> None:
         pass
 
+    def goToTop(self) -> None:
+        pass
+
+    def goToBottom(self) -> None:
+        pass
+
     def processInput(self, inputStr: str) -> Optional[Action]:
         return None
 
@@ -272,9 +278,57 @@ class TextRendererCore(RendererCore):
             self.terminal.clearScrollRegion()
             self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
+    def goToTop(self) -> None:
+        line = 0
+        if line != self.line:
+            self.line = line
+
+            # Gotta redraw the whole thing.
+            self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+            self.terminal.sendCommand(Terminal.SET_NORMAL)
+            self.terminal.moveCursor(self.top, 1)
+            self.terminal.setScrollRegion(self.top, self.bottom)
+            self._displayText(self.line, self.line + self.rows, True)
+            self.terminal.clearScrollRegion()
+            self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+    def goToBottom(self) -> None:
+        line = len(self.text) - self.rows
+        if line != self.line:
+            self.line = line
+
+            # Gotta redraw the whole thing.
+            self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+            self.terminal.sendCommand(Terminal.SET_NORMAL)
+            self.terminal.moveCursor(self.top, 1)
+            self.terminal.setScrollRegion(self.top, self.bottom)
+            self._displayText(self.line, self.line + self.rows, True)
+            self.terminal.clearScrollRegion()
+            self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
     def _displayText(
         self, startVisible: int, endVisible: int, wipeNonText: bool
     ) -> None:
+        bolded = False
+        boldRequested = False
+
+        def sendText(text: str) -> None:
+            nonlocal bolded
+            nonlocal boldRequested
+
+            if bolded != boldRequested:
+                bolded = boldRequested
+                if bolded:
+                    self.terminal.sendCommand(Terminal.SET_BOLD)
+                else:
+                    self.terminal.sendCommand(Terminal.SET_NORMAL)
+
+            self.terminal.sendText(text)
+
+        def setBold(bold: bool) -> None:
+            nonlocal boldRequested
+            boldRequested = bold
+
         displayed = 0
         line = 0
         linkDepth = 0
@@ -292,7 +346,7 @@ class TextRendererCore(RendererCore):
                 if openLinkPos < 0 and closeLinkPos < 0:
                     # No links in this line.
                     if line > startVisible:
-                        self.terminal.sendText(text)
+                        sendText(text)
                     text = ""
                 elif openLinkPos >= 0 and closeLinkPos < 0:
                     # Started a link in this line, but didn't end it.
@@ -300,12 +354,12 @@ class TextRendererCore(RendererCore):
                     before, text = text.split("[", 1)
 
                     if line > startVisible:
-                        self.terminal.sendText(before)
+                        sendText(before)
                     if linkDepth == 1:
                         # Only bold on the outermost link marker.
-                        self.terminal.sendCommand(Terminal.SET_BOLD)
+                        setBold(True)
                     if line > startVisible:
-                        self.terminal.sendText("[")
+                        sendText("[")
                 elif (openLinkPos < 0 and closeLinkPos >= 0) or (
                     closeLinkPos < openLinkPos
                 ):
@@ -314,10 +368,10 @@ class TextRendererCore(RendererCore):
                     after, text = text.split("]", 1)
 
                     if line > startVisible:
-                        self.terminal.sendText(after)
-                        self.terminal.sendText("]")
+                        sendText(after)
+                        sendText("]")
                     if linkDepth == 1:
-                        self.terminal.sendCommand(Terminal.SET_NORMAL)
+                        setBold(False)
 
                     linkDepth -= 1
                 else:
@@ -326,20 +380,20 @@ class TextRendererCore(RendererCore):
                     before, text = text.split("[", 1)
 
                     if line > startVisible:
-                        self.terminal.sendText(before)
+                        sendText(before)
                     if linkDepth == 0:
                         # Only bold on the outermost link marker.
-                        self.terminal.sendCommand(Terminal.SET_BOLD)
+                        setBold(True)
                     if line > startVisible:
-                        self.terminal.sendText("[")
+                        sendText("[")
 
                     after, text = text.split("]", 1)
 
                     if line > startVisible:
-                        self.terminal.sendText(after)
-                        self.terminal.sendText("]")
+                        sendText(after)
+                        sendText("]")
                     if linkDepth == 0:
-                        self.terminal.sendCommand(Terminal.SET_NORMAL)
+                        setBold(False)
 
             if line > startVisible:
                 displayed += 1
@@ -534,6 +588,14 @@ class Renderer:
                     "next": (
                         None,
                         "Scroll down one screen's worth of text on the current page.",
+                    ),
+                    "top": (
+                        None,
+                        "Scroll to the top of the text on the current page.",
+                    ),
+                    "bottom": (
+                        None,
+                        "Scroll to the bottom of the text on the current page.",
                     ),
                     "set": (
                         "SETTING=VALUE",
@@ -732,6 +794,12 @@ class Renderer:
             elif actual == "prev":
                 self.clearInput()
                 self.renderer.pageUp()
+            elif actual == "top":
+                self.clearInput()
+                self.renderer.goToTop()
+            elif actual == "bottom":
+                self.clearInput()
+                self.renderer.goToBottom()
             elif actual == "set" or actual.startswith("set "):
                 if " " not in actual:
                     self.displayError("No setting requested!")
