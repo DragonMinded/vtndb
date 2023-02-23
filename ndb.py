@@ -2,13 +2,17 @@ import argparse
 import os
 import random
 import sys
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
-from wiki import Wiki, Page
+from wiki import Wiki, Domain, Page
 from terminal import Terminal
 
 
 class Action:
+    pass
+
+
+class NullAction(Action):
     pass
 
 
@@ -87,6 +91,9 @@ class RendererCore:
 
     def pageDown(self) -> None:
         pass
+
+    def processInput(self, inputStr: str) -> Optional[Action]:
+        return None
 
 
 class TextRendererCore(RendererCore):
@@ -188,7 +195,7 @@ class TextRendererCore(RendererCore):
         joinLines()
         return newText
 
-    def displayText(self, text: str) -> None:
+    def displayText(self, text: str, forceRefresh: bool = False) -> None:
         # First, we need to wordwrap the text based on the terminal's width.
         text = self.wordWrap(text)
         self.text = text.split("\n")
@@ -200,7 +207,7 @@ class TextRendererCore(RendererCore):
         # Display the visible chunk of text. For an initial draw, we're good
         # relying on our parent renderer to have cleared the viewport.
         self.line = 0
-        self._displayText(self.line, self.line + self.rows, False)
+        self._displayText(self.line, self.line + self.rows, forceRefresh)
 
         # No longer need scroll region protection.
         self.terminal.clearScrollRegion()
@@ -340,7 +347,7 @@ class TextRendererCore(RendererCore):
                 if needsClear:
                     self.terminal.sendCommand(Terminal.CLEAR_TO_END_OF_LINE)
 
-                if line != lastLine:
+                if line != endVisible:
                     self.terminal.sendText("\n")
 
         if wipeNonText:
@@ -352,6 +359,99 @@ class TextRendererCore(RendererCore):
                     self.terminal.sendText("\n")
 
                 displayed += 1
+
+
+class SearchRendererCore(TextRendererCore):
+    def __init__(
+        self,
+        domain: Domain,
+        renderer: "Renderer",
+        terminal: Terminal,
+        top: int,
+        bottom: int,
+    ) -> None:
+        super().__init__(terminal, top, bottom)
+        self.domain = domain
+        self.renderer = renderer
+        self.displayedDomain = ""
+        self.displayedRoot = ""
+        self.displayedHelp = ""
+        self.results: List[Page] = []
+
+    def displaySearch(self, searchInput: str) -> None:
+        lines = searchInput.split("\n")
+        self.displayedDomain = lines[0]
+        self.displayedRoot = lines[1]
+
+        data = "\n".join(lines[2:])
+        self.displayedHelp = "\n".join(data.split("css"))
+        self.displayText(self.displayedHelp)
+
+    def displayResults(self, term: str, results: List[Tuple[Page, int]]) -> None:
+        processedResults: List[str] = []
+        for i, result in enumerate(results):
+            processedResults.append(f"[#{i + 1}] {result[1]} Hits - {result[0].name}")
+            processedResults.append(result[0].path)
+
+        self.line = 0
+        self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+        self.terminal.sendCommand(Terminal.SET_NORMAL)
+        self.displayText(
+            "\n".join(
+                [
+                    self.displayedHelp,
+                    "",
+                    "",
+                    f'Searching term "{term}" in {self.displayedRoot} of {self.displayedDomain}',
+                    "",
+                    "",
+                    f'Results for "{term}":' if results else f'No results for "{term}"',
+                    *processedResults,
+                ]
+            ),
+            forceRefresh=True,
+        )
+        self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+        self.results = [r[0] for r in results]
+
+    def processInput(self, inputStr: str) -> Optional[Action]:
+        if inputStr == "search" or inputStr.startswith("search "):
+            if " " not in inputStr:
+                self.renderer.displayError("No search term specified!")
+            else:
+                _, searchTerm = inputStr.split(" ", 1)
+                searchTerm = searchTerm.strip().lower()
+
+                # Grab all of the articles and search them.
+                pages: List[Tuple[Page, int]] = []
+                for page in self.domain.getAllPages():
+                    lowerData = page.data.lower()
+                    if searchTerm in lowerData:
+                        pages.append((page, len(lowerData.split(searchTerm)) - 1))
+
+                self.renderer.clearInput()
+                self.displayResults(searchTerm, pages)
+
+            return NullAction()
+        elif inputStr[0] == "#":
+            # Result navigation.
+            try:
+                result = int(inputStr[1:])
+                result -= 1
+
+                if result < 0 or result >= len(self.results):
+                    self.renderer.displayError("Unknown result navigation request!")
+                else:
+                    # Navigate to the page whole cloth.
+                    page = self.results[result]
+                    return NavigateAction(f"{page.domain.root}:{page.path}")
+            except ValueError:
+                self.renderer.displayError("Invalid result navigation request!")
+
+            return NullAction()
+
+        # Didn't handle this.
+        return None
 
 
 class Renderer:
@@ -474,6 +574,11 @@ class Renderer:
                         ]
                     )
                 )
+        elif page.extension == "SRCH":
+            self.renderer = SearchRendererCore(
+                page.domain, self, self.terminal, 3, self.terminal.rows - 2
+            )
+            self.renderer.displaySearch(page.data)
         else:
             raise NotImplementedError(f"Page type {page.extension} is unimplemented!")
 
@@ -573,6 +678,11 @@ class Renderer:
             if not actual:
                 return None
 
+            # First, try to delegate to the actual page.
+            subResponse = self.renderer.processInput(actual)
+            if subResponse is not None:
+                return subResponse
+
             if actual[0] == "!":
                 # Link navigation.
                 try:
@@ -593,7 +703,7 @@ class Renderer:
                     self.displayError("Invalid link navigation request!")
             elif actual == "back":
                 return BackAction()
-            elif actual.startswith("goto"):
+            elif actual == "goto" or actual.startswith("goto "):
                 if " " not in actual:
                     self.displayError("No page requested!")
                 else:
@@ -622,7 +732,7 @@ class Renderer:
             elif actual == "prev":
                 self.clearInput()
                 self.renderer.pageUp()
-            elif actual.startswith("set"):
+            elif actual == "set" or actual.startswith("set "):
                 if " " not in actual:
                     self.displayError("No setting requested!")
                 else:
@@ -638,7 +748,7 @@ class Renderer:
                         value = None
 
                     return SettingAction(setting, value)
-            elif actual.startswith("cd"):
+            elif actual == "cd" or actual.startswith("cd "):
                 if " " not in actual:
                     self.displayError("No directory specified!")
                 else:

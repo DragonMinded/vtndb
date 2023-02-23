@@ -60,6 +60,9 @@ class Domain:
             Page(self, name, path, extension, back, data, links, metadata)
         )
 
+    def getAllPages(self) -> List[Page]:
+        return [p for p in self.pages if p.path != self.error]
+
 
 class Wiki:
     def __init__(self, data: str) -> None:
@@ -216,10 +219,13 @@ class Wiki:
             + " resolves to a domain with no valid path and no valid error page!"
         )
 
-    def getAllPages(self) -> List[Page]:
+    def getAllPages(self, domain: Optional[str] = None) -> List[Page]:
         pages: List[Page] = []
 
-        for domain in self.domains:
-            pages.extend(p for p in domain.pages if p.path != domain.error)
+        for dom in self.domains:
+            if domain is not None and domain != dom.root:
+                continue
+
+            pages.extend(p for p in dom.pages if p.path != dom.error)
 
         return pages
