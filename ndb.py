@@ -977,7 +977,7 @@ class CalendarRendererCore(TextRendererCore):
                 try:
                     yearnum = int(year)
 
-                    if yearnum < 1 or yearnum > 40:
+                    if yearnum < self.minYear or yearnum > self.maxYear:
                         self.renderer.displayError("Invalid year specified!")
                     else:
                         self.year = yearnum
@@ -1001,6 +1001,96 @@ class CalendarRendererCore(TextRendererCore):
                     return NavigateAction(self.links[result])
             except ValueError:
                 self.renderer.displayError("Invalid event navigation request!")
+
+            return NullAction()
+        elif inputStr == "nextyear":
+            if self.year < self.maxYear:
+                self.year += 1
+                self.renderer.clearInput()
+                self.displayToday(True)
+            else:
+                self.renderer.displayError("Cannot go beyond last year!")
+
+            return NullAction()
+        elif inputStr == "prevyear":
+            if self.year > self.minYear:
+                self.year -= 1
+                self.renderer.clearInput()
+                self.displayToday(True)
+            else:
+                self.renderer.displayError("Cannot go beyond first year!")
+
+            return NullAction()
+        elif inputStr == "nextmonth":
+            if self.month < 14:
+                self.month += 1
+                self.renderer.clearInput()
+                self.displayToday(True)
+            elif self.year < self.maxYear:
+                self.month = 1
+                self.year += 1
+                self.renderer.clearInput()
+                self.displayToday(True)
+            else:
+                self.renderer.displayError("Cannot go beyond last year!")
+
+            return NullAction()
+        elif inputStr == "prevmonth":
+            if self.month > 1:
+                self.month -= 1
+                self.renderer.clearInput()
+                self.displayToday(True)
+            elif self.year > self.minYear:
+                self.month = 14
+                self.year -= 1
+                self.renderer.clearInput()
+                self.displayToday(True)
+            else:
+                self.renderer.displayError("Cannot go beyond first year!")
+
+            return NullAction()
+        elif inputStr == "nextday":
+            if self.day == -1:
+                self.renderer.displayError("Must select a day first!")
+            elif self.day < 40:
+                self.day += 1
+                self.renderer.clearInput()
+                self.displayToday(True)
+            elif self.month < 14:
+                self.day = 1
+                self.month += 1
+                self.renderer.clearInput()
+                self.displayToday(True)
+            elif self.year < self.maxYear:
+                self.day = 1
+                self.month = 1
+                self.year += 1
+                self.renderer.clearInput()
+                self.displayToday(True)
+            else:
+                self.renderer.displayError("Cannot go beyond last year!")
+
+            return NullAction()
+        elif inputStr == "prevday":
+            if self.day == -1:
+                self.renderer.displayError("Must select a day first!")
+            elif self.day > 1:
+                self.day -= 1
+                self.renderer.clearInput()
+                self.displayToday(True)
+            elif self.month > 1:
+                self.day = 40
+                self.month -= 1
+                self.renderer.clearInput()
+                self.displayToday(True)
+            elif self.year > self.minYear:
+                self.day = 40
+                self.month = 14
+                self.year -= 1
+                self.renderer.clearInput()
+                self.displayToday(True)
+            else:
+                self.renderer.displayError("Cannot go beyond first year!")
 
             return NullAction()
 

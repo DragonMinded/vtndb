@@ -9,5 +9,5 @@ What works (basically everything):
  - Displaying local command help using the "help" command.
  - Interacting with special pages, such as the wiki search, calendars and dictionary pages.
  - Full editing of commands using arrow keys, backspace and all alphanumeric inputs on the VT-100.
- - Scrolling with the arrow keys as well as page up with "prev" and page down with "next".
+ - Scrolling with the arrow keys as well as page up with "prev", page down with "next", top of page with "top" and bottom of page with "bottom".
  - Link highlighting, map drawing and box drawing are mapped to VT-100 character sets.
