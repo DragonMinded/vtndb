@@ -62,14 +62,17 @@ class Terminal:
         self.checkOk()
 
         # Reset terminal.
+        self.columns: int = 80
+        self.rows: int = 24
+        self.reset()
+
+    def reset(self) -> None:
+        self.sendCommand(self.SET_80_COLUMNS)
         self.sendCommand(self.TURN_OFF_REGION)
         self.sendCommand(self.CLEAR_SCREEN)
         self.sendCommand(self.MOVE_CURSOR_ORIGIN)
-        self.sendCommand(self.SET_80_COLUMNS)
         self.sendCommand(self.SET_NORMAL)
         self.sendCommand(self.TURN_OFF_AUTOWRAP)
-        self.columns: int = 80
-        self.rows: int = 24
 
     def checkOk(self) -> None:
         self.sendCommand(self.REQUEST_STATUS)
@@ -79,12 +82,10 @@ class Terminal:
     def set132Columns(self) -> None:
         self.sendCommand(self.SET_132_COLUMNS)
         self.checkOk()
-        self.columns = 132
 
     def set80Columns(self) -> None:
         self.sendCommand(self.SET_80_COLUMNS)
         self.checkOk()
-        self.columns = 80
 
     def sendCommand(self, cmd: bytes) -> None:
         self.serial.write(self.ESCAPE)
@@ -96,6 +97,10 @@ class Terminal:
             self.reversed = True
         elif cmd == self.SET_BOLD:
             self.bolded = True
+        elif cmd == self.SET_132_COLUMNS:
+            self.columns = 132
+        elif cmd == self.SET_80_COLUMNS:
+            self.columns = 80
 
         self.serial.write(cmd)
 

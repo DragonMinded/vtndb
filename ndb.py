@@ -1521,7 +1521,8 @@ def main(port: str, baudrate: int) -> int:
                 break
 
     # Restore the screen before exiting.
-    terminal.sendCommand(Terminal.CLEAR_SCREEN)
+    terminal.reset()
+
     return 0
 
 
