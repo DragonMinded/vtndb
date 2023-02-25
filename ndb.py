@@ -14,10 +14,6 @@ class Action:
     pass
 
 
-class TerminalBusyAction(Action):
-    pass
-
-
 class NullAction(Action):
     pass
 
@@ -1287,10 +1283,6 @@ class Renderer:
         page = self.page
 
         row, col = self.terminal.fetchCursor()
-        if row != self.terminal.rows:
-            # Terminal is mid-draw of a long page, ask to wait.
-            return TerminalBusyAction()
-
         if inputVal == Terminal.LEFT:
             if col > 1:
                 col -= 1
@@ -1513,12 +1505,7 @@ def main(port: str, baudrate: int) -> int:
                         terminal.recvInput()
 
                 if inputVal:
-                    while True:
-                        action = renderer.processInput(inputVal)
-                        if not isinstance(action, TerminalBusyAction):
-                            break
-                        time.sleep(0.1)
-
+                    action = renderer.processInput(inputVal)
                     if isinstance(action, NavigateAction):
                         page = nav.navigate(action.uri)
                         renderer.displayPage(page)
