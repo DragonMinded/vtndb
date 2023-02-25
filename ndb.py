@@ -1638,6 +1638,9 @@ def main(port: str, baudrate: int) -> int:
         except TerminalException:
             # Terminal went away mid-transaction.
             print("Lost terminal, will attempt a reconnect.")
+        except KeyboardInterrupt:
+            print("Got request to end session!")
+            exiting = True
 
     # Restore the screen before exiting.
     terminal.reset()
