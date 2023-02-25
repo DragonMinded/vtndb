@@ -69,6 +69,7 @@ class Terminal:
         # Reset terminal.
         self.columns: int = 80
         self.rows: int = 24
+        self.cursor: Tuple[int, int] = (-1, -1)
         self.reset()
 
     def reset(self) -> None:
@@ -96,6 +97,7 @@ class Terminal:
         self.checkOk()
 
     def sendCommand(self, cmd: bytes) -> None:
+        self.cursor = (-1, -1)
         self.serial.write(self.ESCAPE)
 
         if cmd == self.SET_NORMAL:
@@ -113,9 +115,18 @@ class Terminal:
         self.serial.write(cmd)
 
     def moveCursor(self, row: int, col: int) -> None:
+        if row < 1 or row > self.rows:
+            return
+        if col < 1 or col > self.columns:
+            return
+
         self.sendCommand(f"[{row};{col}H".encode("ascii"))
+        self.cursor = (row, col)
 
     def fetchCursor(self) -> Tuple[int, int]:
+        if self.cursor[0] != -1 and self.cursor[1] != -1:
+            return self.cursor
+
         self.sendCommand(self.REQUEST_CURSOR)
         for _ in range(12):
             # We could be mid-page refresh, so give a wide berth.
@@ -133,9 +144,11 @@ class Terminal:
             raise TerminalException("Couldn't receive cursor position from terminal!")
         respstr = resp[1:-1].decode("ascii")
         row, col = respstr.split(";", 1)
-        return int(row), int(col)
+        self.cursor = (int(row), int(col))
+        return self.cursor
 
     def sendText(self, text: str) -> None:
+        self.cursor = (-1, -1)
         inAlt = False
 
         def alt(char: bytes) -> bytes:

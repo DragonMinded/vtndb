@@ -14,6 +14,10 @@ class Action:
     pass
 
 
+class TerminalBusyAction(Action):
+    pass
+
+
 class NullAction(Action):
     pass
 
@@ -1282,13 +1286,16 @@ class Renderer:
             return None
         page = self.page
 
+        row, col = self.terminal.fetchCursor()
+        if row != self.terminal.rows:
+            # Terminal is mid-draw of a long page, ask to wait.
+            return TerminalBusyAction()
+
         if inputVal == Terminal.LEFT:
-            row, col = self.terminal.fetchCursor()
             if col > 1:
                 col -= 1
                 self.terminal.moveCursor(row, col)
         elif inputVal == Terminal.RIGHT:
-            row, col = self.terminal.fetchCursor()
             if col < (len(self.input) + 1):
                 col += 1
                 self.terminal.moveCursor(row, col)
@@ -1299,8 +1306,6 @@ class Renderer:
         elif inputVal in {Terminal.BACKSPACE, Terminal.DELETE}:
             if self.input:
                 # Just subtract from input.
-                row, col = self.terminal.fetchCursor()
-
                 if col == len(self.input) + 1:
                     # Erasing at the end of the line.
                     self.input = self.input[:-1]
@@ -1438,7 +1443,6 @@ class Renderer:
                 self.displayError(f"Unrecognized command {actual}")
         else:
             # Just add to input.
-            row, col = self.terminal.fetchCursor()
             char = inputVal.decode("ascii")
 
             if col == len(self.input) + 1:
@@ -1447,6 +1451,7 @@ class Renderer:
                 self.terminal.sendCommand(Terminal.SET_NORMAL)
                 self.terminal.sendCommand(Terminal.SET_REVERSE)
                 self.terminal.sendText(char)
+                self.terminal.moveCursor(row, col + 1)
             else:
                 # Adding to mid-input.
                 spot = col - 1
@@ -1504,7 +1509,12 @@ def main(port: str, baudrate: int) -> int:
                         terminal.recvInput()
 
                 if inputVal:
-                    action = renderer.processInput(inputVal)
+                    while True:
+                        action = renderer.processInput(inputVal)
+                        if not isinstance(action, TerminalBusyAction):
+                            break
+                        time.sleep(0.1)
+
                     if isinstance(action, NavigateAction):
                         page = nav.navigate(action.uri)
                         renderer.displayPage(page)
