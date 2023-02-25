@@ -1442,25 +1442,29 @@ class Renderer:
             else:
                 self.displayError(f"Unrecognized command {actual}")
         else:
-            # Just add to input.
-            char = inputVal.decode("ascii")
+            if len(self.input) < (self.terminal.columns - 1):
+                # If we got some unprintable character, ignore it.
+                inputVal = bytes(v for v in inputVal if v >= 0x20)
+                if inputVal:
+                    # Just add to input.
+                    char = inputVal.decode("ascii")
 
-            if col == len(self.input) + 1:
-                # Just appending to the input.
-                self.input += char
-                self.terminal.sendCommand(Terminal.SET_NORMAL)
-                self.terminal.sendCommand(Terminal.SET_REVERSE)
-                self.terminal.sendText(char)
-                self.terminal.moveCursor(row, col + 1)
-            else:
-                # Adding to mid-input.
-                spot = col - 1
-                self.input = self.input[:spot] + char + self.input[spot:]
+                    if col == len(self.input) + 1:
+                        # Just appending to the input.
+                        self.input += char
+                        self.terminal.sendCommand(Terminal.SET_NORMAL)
+                        self.terminal.sendCommand(Terminal.SET_REVERSE)
+                        self.terminal.sendText(char)
+                        self.terminal.moveCursor(row, col + 1)
+                    else:
+                        # Adding to mid-input.
+                        spot = col - 1
+                        self.input = self.input[:spot] + char + self.input[spot:]
 
-                self.terminal.sendCommand(Terminal.SET_NORMAL)
-                self.terminal.sendCommand(Terminal.SET_REVERSE)
-                self.terminal.sendText(self.input[spot:])
-                self.terminal.moveCursor(row, col + 1)
+                        self.terminal.sendCommand(Terminal.SET_NORMAL)
+                        self.terminal.sendCommand(Terminal.SET_REVERSE)
+                        self.terminal.sendText(self.input[spot:])
+                        self.terminal.moveCursor(row, col + 1)
 
         # Nothing happening here!
         return None
