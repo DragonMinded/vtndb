@@ -456,9 +456,7 @@ class SearchRendererCore(TextRendererCore):
                 [
                     self.displayedHelp,
                     "",
-                    "",
                     f'Searching term "{term}" in {self.displayedRoot} of {self.displayedDomain}',
-                    "",
                     "",
                     f'Results for "{term}":' if results else f'No results for "{term}"',
                     *processedResults,
@@ -540,8 +538,6 @@ class DictionaryRendererCore(TextRendererCore):
             [
                 *self.instructions,
                 "",
-                "",
-                "",
                 f"[{data['langName']} Dictionary]",
                 "",
                 data["splashPageText"],
@@ -557,8 +553,6 @@ class DictionaryRendererCore(TextRendererCore):
             "\n".join(
                 [
                     *self.instructions,
-                    "",
-                    "",
                     "",
                     f'[ {root["name"]} ] -- ("{root["pronunciation"]}")',
                     f"Type: {root['type']}",
@@ -589,8 +583,6 @@ class DictionaryRendererCore(TextRendererCore):
                 [
                     *self.instructions,
                     "",
-                    "",
-                    "",
                     *roots,
                 ]
             ),
@@ -606,8 +598,6 @@ class DictionaryRendererCore(TextRendererCore):
             "\n".join(
                 [
                     *self.instructions,
-                    "",
-                    "",
                     "",
                     f'[ {word["name"]} ] -- ("{word["pronunciation"]}")',
                     "",
@@ -643,8 +633,6 @@ class DictionaryRendererCore(TextRendererCore):
                 [
                     *self.instructions,
                     "",
-                    "",
-                    "",
                     *words,
                 ]
             ),
@@ -660,8 +648,6 @@ class DictionaryRendererCore(TextRendererCore):
             "\n".join(
                 [
                     *self.instructions,
-                    "",
-                    "",
                     "",
                     f'Could not find {searchType} "{searchStr}"',
                     "Make sure you spelled it correctly, and try again.",
@@ -714,6 +700,307 @@ class DictionaryRendererCore(TextRendererCore):
                         break
                 else:
                     self.displayFailure("word", word)
+
+            return NullAction()
+
+        # Didn't handle this.
+        return None
+
+
+class CalendarRendererCore(TextRendererCore):
+    def __init__(
+        self,
+        renderer: "Renderer",
+        terminal: Terminal,
+        top: int,
+        bottom: int,
+    ) -> None:
+        super().__init__(terminal, top, bottom)
+        self.renderer = renderer
+        self.instructions = [
+            "Commands:",
+            '    "day [number]" - Select a specific day (ex: "day 23")',
+            '    "month [number]" - Go to a specific month (ex: "month 2")',
+            '    "year [number]" - Go to a specific year (ex: "year 107")',
+        ]
+        self.months = [
+            "CopperFlame",
+            "Crystone",
+            "Deriz",
+            "Bloom",
+            "Lereai",
+            "HarvestCrest",
+            "Karmil",
+            "SteelFell",
+            "Lunakin",
+            "SiltCrest",
+            "TinBell",
+            "Etherglide",
+            "Crimson",
+            "Apofel",
+        ]
+        self.suffix = {
+            1: "st",
+            2: "nd",
+            3: "rd",
+            21: "st",
+            22: "nd",
+            23: "rd",
+            31: "st",
+            32: "nd",
+            33: "rd",
+        }
+        self.events: List[Dict[str, Any]] = []
+        self.links: List[str] = []
+
+        self.day = -1
+        self.month = 1
+        self.year = 1
+        self.maxYear = 0
+        self.minYear = 0
+
+    def padDay(self, day: int, amount: int) -> str:
+        dayval = str(day)
+        while len(dayval) < amount:
+            dayval = "0" + dayval
+        return dayval
+
+    def addSuffix(self, number: int) -> str:
+        numval = str(number)
+        return numval + self.suffix.get(number, "th")
+
+    def formatNow(self) -> str:
+        if self.day == -1:
+            return f"{self.months[self.month - 1]}, Year {self.year} -- {self.month}/{self.year}"
+        else:
+            return f"{self.addSuffix(self.day)} of {self.months[self.month - 1]}, Year {self.year} -- {self.day}/{self.month}/{self.year}"
+
+    def displayCalendar(self, searchInput: str) -> None:
+        data = json.loads(searchInput)
+        self.day = -1
+        self.month = int(data["startMonth"])
+        self.year = int(data["startYear"])
+        self.minYear = int(data["minYear"])
+        self.maxYear = int(data["maxYear"])
+
+        for event in data["events"]:
+            # This should be a day, month, year triple-list
+            origin = tuple(event["origin"])
+
+            if event["repeats"] == 0:
+                self.events.append(
+                    {
+                        "date": origin,
+                        "name": event["name"],
+                        "link": event["link"],
+                        "tags": event["tags"],
+                    }
+                )
+            elif event["repeats"] > 0:
+                # Should be a day, month, year repeat instruction.
+                period = tuple(event["period"])
+
+                for _ in range(event["repeats"]):
+                    self.events.append(
+                        {
+                            "date": origin,
+                            "name": event["name"],
+                            "link": event["link"],
+                            "tags": event["tags"],
+                        }
+                    )
+                    origin = (
+                        origin[0] + period[0],
+                        origin[1] + period[1],
+                        origin[2] + period[2],
+                    )
+            elif event["repeats"] < 0:
+                # Should be a day, month, year repeat instruction.
+                period = tuple(event["period"])
+
+                while origin[2] <= self.maxYear:
+                    self.events.append(
+                        {
+                            "date": origin,
+                            "name": event["name"],
+                            "link": event["link"],
+                            "tags": event["tags"],
+                        }
+                    )
+                    origin = (
+                        origin[0] + period[0],
+                        origin[1] + period[1],
+                        origin[2] + period[2],
+                    )
+
+        self.displayToday(False)
+
+    def hasEvent(self, day: int, month: int, year: int) -> bool:
+        for event in self.events:
+            if event["date"][0] != day:
+                continue
+            if event["date"][1] != month:
+                continue
+            if event["date"][2] != year:
+                continue
+
+            return True
+        return False
+
+    def getEvents(self, day: int, month: int, year: int) -> List[Dict[str, Any]]:
+        events: List[Dict[str, Any]] = []
+        for event in self.events:
+            if event["date"][0] != day:
+                continue
+            if event["date"][1] != month:
+                continue
+            if event["date"][2] != year:
+                continue
+
+            events.append(event)
+        return events
+
+    def highlightDay(self, day: int) -> str:
+        if day == self.day:
+            return f"[{self.padDay(day, 2)}]"
+        elif self.hasEvent(day, self.month, self.year):
+            return f"-{self.padDay(day, 2)}-"
+        else:
+            return f" {self.padDay(day, 2)} "
+
+    def eventLines(self) -> List[str]:
+        if self.day == -1:
+            return [
+                "No day selected.",
+                'Type "day [day number]" to select a day of the month.',
+            ]
+        else:
+            events = self.getEvents(self.day, self.month, self.year)
+
+            if events:
+                self.links = []
+                lines: List[str] = []
+
+                for i, event in enumerate(events):
+                    self.links.append(event["link"])
+                    lines.append(f"[#{i + 1}] {event['name']}")
+                    lines.append(event["link"])
+
+                return lines
+            else:
+                return [
+                    "No events for this day.",
+                    'Type "day [day number]" to select a different day of the month.',
+                ]
+
+    def calendarLines(self) -> List[str]:
+        lines = []
+        for start in range(1, 40, 5):
+            lines.append("".join(self.highlightDay(x) for x in range(start, start + 5)))
+
+        return [
+            "\u250c" + "\u2500" * 20 + "\u2510",
+            *["\u2502" + line + "\u2502" for line in lines],
+            "\u2514" + "\u2500" * 20 + "\u2518",
+            "",
+            *self.eventLines(),
+        ]
+
+    def displayToday(self, refresh: bool) -> None:
+        splash = "\n".join(
+            [
+                *self.instructions,
+                "",
+                f"[{self.formatNow()}]",
+                *self.calendarLines(),
+            ]
+        )
+
+        if refresh:
+            self.line = 0
+            self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+            self.terminal.sendCommand(Terminal.SET_NORMAL)
+        self.displayText(splash, forceRefresh=refresh)
+        if refresh:
+            self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+    def processInput(self, inputStr: str) -> Optional[Action]:
+        if inputStr == "day" or inputStr.startswith("day "):
+            if " " not in inputStr:
+                self.renderer.displayError("No day specified!")
+            else:
+                _, day = inputStr.split(" ", 1)
+                day = day.strip().lower()
+
+                try:
+                    daynum = int(day)
+
+                    if daynum < 1 or daynum > 40:
+                        self.renderer.displayError("Invalid day specified!")
+                    else:
+                        self.day = daynum
+                        self.renderer.clearInput()
+                        self.displayToday(True)
+
+                except ValueError:
+                    self.renderer.displayError("Invalid day specified!")
+
+            return NullAction()
+        elif inputStr == "month" or inputStr.startswith("month "):
+            if " " not in inputStr:
+                self.renderer.displayError("No month specified!")
+            else:
+                _, month = inputStr.split(" ", 1)
+                month = month.strip().lower()
+
+                try:
+                    monthnum = int(month)
+
+                    if monthnum < 1 or monthnum > 14:
+                        self.renderer.displayError("Invalid month specified!")
+                    else:
+                        self.month = monthnum
+                        self.renderer.clearInput()
+                        self.displayToday(True)
+
+                except ValueError:
+                    self.renderer.displayError("Invalid month specified!")
+
+            return NullAction()
+        elif inputStr == "year" or inputStr.startswith("year "):
+            if " " not in inputStr:
+                self.renderer.displayError("No year specified!")
+            else:
+                _, year = inputStr.split(" ", 1)
+                year = year.strip().lower()
+
+                try:
+                    yearnum = int(year)
+
+                    if yearnum < 1 or yearnum > 40:
+                        self.renderer.displayError("Invalid year specified!")
+                    else:
+                        self.year = yearnum
+                        self.renderer.clearInput()
+                        self.displayToday(True)
+
+                except ValueError:
+                    self.renderer.displayError("Invalid year specified!")
+
+            return NullAction()
+        elif inputStr[0] == "#":
+            # Calendar navigation.
+            try:
+                result = int(inputStr[1:])
+                result -= 1
+
+                if result < 0 or result >= len(self.links):
+                    self.renderer.displayError("Unknown event navigation request!")
+                else:
+                    # Navigate to the page whole cloth.
+                    return NavigateAction(self.links[result])
+            except ValueError:
+                self.renderer.displayError("Invalid event navigation request!")
 
             return NullAction()
 
@@ -856,6 +1143,11 @@ class Renderer:
                 self, self.terminal, 3, self.terminal.rows - 2
             )
             self.renderer.displayDictionary(page.data)
+        elif page.extension in {"CLND", "CLDR"}:
+            self.renderer = CalendarRendererCore(
+                self, self.terminal, 3, self.terminal.rows - 2
+            )
+            self.renderer.displayCalendar(page.data)
         else:
             raise NotImplementedError(f"Page type {page.extension} is unimplemented!")
 
@@ -868,6 +1160,7 @@ class Renderer:
 
         self.terminal.moveCursor(self.terminal.rows, 1)
         self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+        self.terminal.sendCommand(Terminal.SET_NORMAL)
         self.terminal.sendCommand(Terminal.SET_REVERSE)
         self.terminal.sendText(" " * self.terminal.columns)
         self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
@@ -919,6 +1212,7 @@ class Renderer:
 
                     col -= 1
                     self.terminal.moveCursor(row, col)
+                    self.terminal.sendCommand(Terminal.SET_NORMAL)
                     self.terminal.sendCommand(Terminal.SET_REVERSE)
                     self.terminal.sendText(" ")
                     self.terminal.moveCursor(row, col)
@@ -931,6 +1225,7 @@ class Renderer:
 
                     col -= 1
                     self.terminal.moveCursor(row, col)
+                    self.terminal.sendCommand(Terminal.SET_NORMAL)
                     self.terminal.sendCommand(Terminal.SET_REVERSE)
                     self.terminal.sendText(self.input)
                     self.terminal.sendText(" ")
@@ -942,6 +1237,7 @@ class Renderer:
 
                     col -= 1
                     self.terminal.moveCursor(row, col)
+                    self.terminal.sendCommand(Terminal.SET_NORMAL)
                     self.terminal.sendCommand(Terminal.SET_REVERSE)
                     self.terminal.sendText(self.input[spot:])
                     self.terminal.sendText(" ")
@@ -1053,6 +1349,7 @@ class Renderer:
             if col == len(self.input) + 1:
                 # Just appending to the input.
                 self.input += char
+                self.terminal.sendCommand(Terminal.SET_NORMAL)
                 self.terminal.sendCommand(Terminal.SET_REVERSE)
                 self.terminal.sendText(char)
             else:
@@ -1060,6 +1357,7 @@ class Renderer:
                 spot = col - 1
                 self.input = self.input[:spot] + char + self.input[spot:]
 
+                self.terminal.sendCommand(Terminal.SET_NORMAL)
                 self.terminal.sendCommand(Terminal.SET_REVERSE)
                 self.terminal.sendText(self.input[spot:])
                 self.terminal.moveCursor(row, col + 1)
