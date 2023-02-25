@@ -131,7 +131,7 @@ class Wiki:
                 domain.addPage(
                     name=name,
                     path=path,
-                    extension=extension,
+                    extension="CLDR" if extension == "CLND" else extension,
                     back=back,
                     data=data,
                     links=links,
@@ -172,6 +172,48 @@ class Wiki:
         self.help.addPage(
             name="Command Line Help",
             path="",
+            extension="INT",
+            back=None,
+            data="help",
+            links=["NX.HELP:/MAIN/COMHELP"],
+            metadata=Metadata(
+                author="nobody",
+                editor="nobody",
+                created="never",
+                modified="never",
+            ),
+        )
+        self.help.addPage(
+            name="Command Line Help",
+            path="SRCH",
+            extension="INT",
+            back=None,
+            data="help",
+            links=["NX.HELP:/MAIN/COMHELP"],
+            metadata=Metadata(
+                author="nobody",
+                editor="nobody",
+                created="never",
+                modified="never",
+            ),
+        )
+        self.help.addPage(
+            name="Command Line Help",
+            path="DICT",
+            extension="INT",
+            back=None,
+            data="help",
+            links=["NX.HELP:/MAIN/COMHELP"],
+            metadata=Metadata(
+                author="nobody",
+                editor="nobody",
+                created="never",
+                modified="never",
+            ),
+        )
+        self.help.addPage(
+            name="Command Line Help",
+            path="CLDR",
             extension="INT",
             back=None,
             data="help",

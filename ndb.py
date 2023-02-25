@@ -32,7 +32,8 @@ class HomeAction(Action):
 
 
 class HelpAction(Action):
-    pass
+    def __init__(self, pageType: str) -> None:
+        self.pageType = pageType
 
 
 class RandomAction(Action):
@@ -1144,7 +1145,88 @@ class Renderer:
             self.renderer.displayText(data)
         elif page.extension == "INT":
             if page.data == "help":
-                commands = {
+                specific: Dict[str, Tuple[Optional[str], str]] = {
+                    "![NUM]": (
+                        None,
+                        "Navigate to a displayed link by number.",
+                    ),
+                }
+
+                if page.path == "SRCH":
+                    specific = {
+                        "search": (
+                            "TERM",
+                            "Search the current domain for a specified term.",
+                        ),
+                        "#[NUM]": (
+                            None,
+                            "Navigate to a displayed search result by number.",
+                        ),
+                    }
+                elif page.path == "DICT":
+                    specific = {
+                        "root": (
+                            "ROOT",
+                            "Display information about the specified root.",
+                        ),
+                        "roots": (
+                            None,
+                            "Display a listing of all roots for the current language.",
+                        ),
+                        "word": (
+                            "WORD",
+                            "Display information about the specified word.",
+                        ),
+                        "words": (
+                            None,
+                            "Display a listing of all words for the current language.",
+                        ),
+                    }
+                elif page.path == "CLDR":
+                    specific = {
+                        "day": (
+                            "DAY",
+                            "Navigate to the specified day on the current calendar.",
+                        ),
+                        "month": (
+                            "MONTH",
+                            "Navigate to the specified month on the current calendar.",
+                        ),
+                        "year": (
+                            "YEAR",
+                            "Navigate to the specified year on the current calendar.",
+                        ),
+                        "#[NUM]": (
+                            None,
+                            "Navigate to a displayed calendar event by number.",
+                        ),
+                        "nextday": (
+                            None,
+                            "Navigate to the next day sequentially on the current calendar.",
+                        ),
+                        "prevday": (
+                            None,
+                            "Navigate to the previous day sequentially on the current calendar.",
+                        ),
+                        "nextmonth": (
+                            None,
+                            "Navigate to the next month sequentially on the current calendar.",
+                        ),
+                        "prevmonth": (
+                            None,
+                            "Navigate to the previous month sequentially on the current calendar.",
+                        ),
+                        "nextyear": (
+                            None,
+                            "Navigate to the next year sequentially on the current calendar.",
+                        ),
+                        "prevyear": (
+                            None,
+                            "Navigate to the previous year sequentially on the current calendar.",
+                        ),
+                    }
+
+                commands: Dict[str, Tuple[Optional[str], str]] = {
                     "goto": (
                         "PATH",
                         'Navigate directly to a specified path, such as "NX.HELP:/MAIN". For a more complete '
@@ -1205,7 +1287,7 @@ class Renderer:
                     "The following commands are available to use at any time:",
                     *[
                         f"    {name}{' [' + args + ']' if args else ''}\n        {desc}"
-                        for name, (args, desc) in commands.items()
+                        for name, (args, desc) in [*specific.items(), *commands.items()]
                     ],
                 ]
 
@@ -1235,7 +1317,7 @@ class Renderer:
                 self, self.terminal, 3, self.terminal.rows - 2
             )
             self.renderer.displayDictionary(page.data)
-        elif page.extension in {"CLND", "CLDR"}:
+        elif page.extension == "CLDR":
             self.renderer = CalendarRendererCore(
                 self, self.terminal, 3, self.terminal.rows - 2
             )
@@ -1386,7 +1468,7 @@ class Renderer:
             elif actual == "root":
                 return NavigateAction(page.domain.root)
             elif actual == "help":
-                return HelpAction()
+                return HelpAction(page.extension)
             elif actual == "random":
                 return RandomAction()
             elif actual == "exit":
@@ -1548,7 +1630,7 @@ def main(port: str, baudrate: int) -> int:
                         )
                         renderer.displayPage(page)
                     elif isinstance(action, HelpAction):
-                        page = nav.navigate("LOCAL.HELP")
+                        page = nav.navigate(f"LOCAL.HELP:{action.pageType}")
                         renderer.displayPage(page)
                     elif isinstance(action, ExitAction):
                         print("Got request to end session!")
