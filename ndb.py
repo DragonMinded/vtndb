@@ -245,11 +245,15 @@ class TextRendererCore(RendererCore):
             self.terminal.clearScrollRegion()
             self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
-    def pageUp(self) -> None:
-        line = self.line - (self.rows - 1)
+    def boundsEnforce(self, line: int) -> int:
+        if line > (len(self.text) - self.rows):
+            line = len(self.text) - self.rows
         if line < 0:
             line = 0
+        return line
 
+    def pageUp(self) -> None:
+        line = self.boundsEnforce(self.line - (self.rows - 1))
         if line != self.line:
             self.line = line
 
@@ -263,10 +267,7 @@ class TextRendererCore(RendererCore):
             self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
     def pageDown(self) -> None:
-        line = self.line + (self.rows - 1)
-        if line > (len(self.text) - self.rows):
-            line = len(self.text) - self.rows
-
+        line = self.boundsEnforce(self.line + (self.rows - 1))
         if line != self.line:
             self.line = line
 
@@ -280,7 +281,7 @@ class TextRendererCore(RendererCore):
             self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
     def goToTop(self) -> None:
-        line = 0
+        line = self.boundsEnforce(0)
         if line != self.line:
             self.line = line
 
@@ -294,7 +295,7 @@ class TextRendererCore(RendererCore):
             self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
 
     def goToBottom(self) -> None:
-        line = len(self.text) - self.rows
+        line = self.boundsEnforce(len(self.text) - self.rows)
         if line != self.line:
             self.line = line
 
