@@ -207,6 +207,8 @@ class Wiki:
         for page in found.pages:
             if page.path == path:
                 return page
+            if page.extension and (page.path + "." + page.extension) == path:
+                return page
 
         # If we couldn't find the page, return the error page.
         for page in found.pages:
