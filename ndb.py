@@ -1,8 +1,9 @@
 import argparse
+import json
 import os
 import random
 import sys
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from wiki import Wiki, Domain, Page
 from terminal import Terminal
@@ -508,6 +509,218 @@ class SearchRendererCore(TextRendererCore):
         return None
 
 
+class DictionaryRendererCore(TextRendererCore):
+    def __init__(
+        self,
+        renderer: "Renderer",
+        terminal: Terminal,
+        top: int,
+        bottom: int,
+    ) -> None:
+        super().__init__(terminal, top, bottom)
+        self.renderer = renderer
+        self.instructions = [
+            "Commands:",
+            '    "roots" - See a list of this language\'s root words',
+            '    "root [root word]" - look at the definition of a specific root word (Ex: "root ka")',
+            '    "words" - See a list of this language\'s words',
+            '    "word [word]" - look at the definition of a specific word (Ex: "word apple")',
+        ]
+        self.roots: List[Dict[str, Any]] = []
+        self.words: List[Dict[str, Any]] = []
+        self.sort = "alphabetical"
+
+    def displayDictionary(self, searchInput: str) -> None:
+        data = json.loads(searchInput)
+        self.sort = str(data["defSortBy"])
+        self.roots = list(data["roots"])
+        self.words = list(data["words"])
+
+        splash = "\n".join(
+            [
+                *self.instructions,
+                "",
+                "",
+                "",
+                f"[{data['langName']} Dictionary]",
+                "",
+                data["splashPageText"],
+            ]
+        )
+        self.displayText(splash)
+
+    def displayRoot(self, root: Dict[str, Any]) -> None:
+        self.line = 0
+        self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+        self.terminal.sendCommand(Terminal.SET_NORMAL)
+        self.displayText(
+            "\n".join(
+                [
+                    *self.instructions,
+                    "",
+                    "",
+                    "",
+                    f'[ {root["name"]} ] -- ("{root["pronunciation"]}")',
+                    f"Type: {root['type']}",
+                    "",
+                    "Meaning:",
+                    f"   {root['meaning']}",
+                    "",
+                    f"Origin: {root.get('origin', 'undefined')}",
+                    "",
+                    "Words containing this root:",
+                    *[f"   {word}" for word in root["examples"]],
+                ]
+            ),
+            forceRefresh=True,
+        )
+        self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+    def displayRoots(self) -> None:
+        roots: List[str] = []
+        for root in self.roots:
+            roots.append(f"  {root['name']} ({root['type']}) -- {root['meaning']}")
+
+        self.line = 0
+        self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+        self.terminal.sendCommand(Terminal.SET_NORMAL)
+        self.displayText(
+            "\n".join(
+                [
+                    *self.instructions,
+                    "",
+                    "",
+                    "",
+                    *roots,
+                ]
+            ),
+            forceRefresh=True,
+        )
+        self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+    def displayWord(self, word: Dict[str, Any]) -> None:
+        self.line = 0
+        self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+        self.terminal.sendCommand(Terminal.SET_NORMAL)
+        self.displayText(
+            "\n".join(
+                [
+                    *self.instructions,
+                    "",
+                    "",
+                    "",
+                    f'[ {word["name"]} ] -- ("{word["pronunciation"]}")',
+                    "",
+                    "Meaning:",
+                    f"   {word['definition']}",
+                    "",
+                    f"Breakdown: {word['breakdown']}",
+                    "",
+                    f"Origin: {word.get('origin', 'undefined')}",
+                    "",
+                    "Examples:",
+                    f"   {word['example']}",
+                    "",
+                    "Roots:",
+                    *[f"   {root}" for root in word["roots"]],
+                ]
+            ),
+            forceRefresh=True,
+        )
+        self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+    def displayWords(self) -> None:
+        words: List[str] = []
+        for word in self.words:
+            words.append(f"  [  {word['name']}  ]")
+            words.append(f"    {word['definition']}")
+
+        self.line = 0
+        self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+        self.terminal.sendCommand(Terminal.SET_NORMAL)
+        self.displayText(
+            "\n".join(
+                [
+                    *self.instructions,
+                    "",
+                    "",
+                    "",
+                    *words,
+                ]
+            ),
+            forceRefresh=True,
+        )
+        self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+    def displayFailure(self, searchType: str, searchStr: str) -> None:
+        self.line = 0
+        self.terminal.sendCommand(Terminal.SAVE_CURSOR)
+        self.terminal.sendCommand(Terminal.SET_NORMAL)
+        self.displayText(
+            "\n".join(
+                [
+                    *self.instructions,
+                    "",
+                    "",
+                    "",
+                    f'Could not find {searchType} "{searchStr}"',
+                    "Make sure you spelled it correctly, and try again.",
+                ]
+            ),
+            forceRefresh=True,
+        )
+        self.terminal.sendCommand(Terminal.RESTORE_CURSOR)
+
+    def processInput(self, inputStr: str) -> Optional[Action]:
+        if inputStr == "roots":
+            self.renderer.clearInput()
+            self.displayRoots()
+
+            return NullAction()
+        elif inputStr == "root" or inputStr.startswith("root "):
+            if " " not in inputStr:
+                self.renderer.displayError("No root specified!")
+            else:
+                _, root = inputStr.split(" ", 1)
+                root = root.strip().lower()
+
+                # Find this root.
+                for data in self.roots:
+                    if data["name"].lower() == root:
+                        self.renderer.clearInput()
+                        self.displayRoot(data)
+                        break
+                else:
+                    self.displayFailure("root", root)
+
+            return NullAction()
+        elif inputStr == "words":
+            self.renderer.clearInput()
+            self.displayWords()
+
+            return NullAction()
+        elif inputStr == "word" or inputStr.startswith("word "):
+            if " " not in inputStr:
+                self.renderer.displayError("No word specified!")
+            else:
+                _, word = inputStr.split(" ", 1)
+                word = word.strip().lower()
+
+                # Find this word.
+                for data in self.words:
+                    if data["name"].lower() == word:
+                        self.renderer.clearInput()
+                        self.displayWord(data)
+                        break
+                else:
+                    self.displayFailure("word", word)
+
+            return NullAction()
+
+        # Didn't handle this.
+        return None
+
+
 class Renderer:
     def __init__(self, terminal: Terminal) -> None:
         self.terminal = terminal
@@ -544,15 +757,12 @@ class Renderer:
         # Render out the text of the page.
         if page.extension in {"", "TEXT", "DOUB"}:
             if page.data in {"Void", "void", "[Unwritten]"}:
-                self.renderer = TextRendererCore(
-                    self.terminal, 3, self.terminal.rows - 2
-                )
-                self.renderer.displayText("\n[Unwritten]")
+                data = "\n[Unwritten]"
             else:
-                self.renderer = TextRendererCore(
-                    self.terminal, 3, self.terminal.rows - 2
-                )
-                self.renderer.displayText("\n".join(page.data.split("css")))
+                data = "\n".join(page.data.split("css"))
+
+            self.renderer = TextRendererCore(self.terminal, 3, self.terminal.rows - 2)
+            self.renderer.displayText(data)
         elif page.extension == "INT":
             if page.data == "help":
                 commands = {
@@ -641,6 +851,11 @@ class Renderer:
                 page.domain, self, self.terminal, 3, self.terminal.rows - 2
             )
             self.renderer.displaySearch(page.data)
+        elif page.extension == "DICT":
+            self.renderer = DictionaryRendererCore(
+                self, self.terminal, 3, self.terminal.rows - 2
+            )
+            self.renderer.displayDictionary(page.data)
         else:
             raise NotImplementedError(f"Page type {page.extension} is unimplemented!")
 

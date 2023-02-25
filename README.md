@@ -7,15 +7,12 @@ What works:
  - Following links using "!" syntax, navigating to the previous page with "back", navigating up with "cd ..".
  - Navigating to random pages using "random".
  - Displaying local command help using the "help" command.
- - Interacting with the wiki search page using the "search" command.
+ - Interacting with special pages, such as the wiki search and dictionary pages.
  - Full editing of commands using arrow keys, backspace and all alphanumeric inputs on the VT-100.
  - Scrolling with the arrow keys as well as page up with "prev" and page down with "next".
  - Link highlighting, map drawing and box drawing are mapped to VT-100 character sets.
 
 What doesn't work (yet):
- - Dictionary feature is unimplemented (DICT extension).
  - Calendar feature is unimplemented (CLND/CLDR extension).
  - As a result, the following pages do not render properly:
    - "EQ.NETPEDIA:/ROOT/CALENDAR/CALENDAR"
-   - "EQ.NETPEDIA:/ROOT/CULTURE/LANGUAGE/NUNWEI/DICTIONARY"
-   - "EQ.NETPEDIA:/ROOT/CULTURE/LANGUAGE/DEORIAN/PROTO/DICTIONARY"
