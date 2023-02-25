@@ -50,6 +50,9 @@ class Terminal:
     BACKSPACE: bytes = b"\x08"
     DELETE: bytes = b"\x7F"
 
+    CHECK_INTERVAL: float = 1.0
+    MAX_FAILURES: int = 3
+
     def __init__(self, port: str, baud: int) -> None:
         self.serial = serial.Serial(port, baud, timeout=0.01)
         self.leftover = b""
@@ -57,6 +60,8 @@ class Terminal:
         self.responses: List[bytes] = []
         self.reversed = False
         self.bolded = False
+        self.lastPolled = time.time()
+        self.pollFailures = 0
 
         # First, connect and figure out what's going on.
         self.checkOk()
@@ -74,9 +79,12 @@ class Terminal:
         self.sendCommand(self.SET_NORMAL)
         self.sendCommand(self.TURN_OFF_AUTOWRAP)
 
-    def checkOk(self) -> None:
+    def isOk(self) -> bool:
         self.sendCommand(self.REQUEST_STATUS)
-        if self.recvResponse(1.0) != self.STATUS_OKAY:
+        return self.recvResponse(1.0) == self.STATUS_OKAY
+
+    def checkOk(self) -> None:
+        if not self.isOk():
             raise TerminalException("Terminal did not respond okay!")
 
     def set132Columns(self) -> None:
@@ -109,8 +117,9 @@ class Terminal:
 
     def fetchCursor(self) -> Tuple[int, int]:
         self.sendCommand(self.REQUEST_CURSOR)
-        while True:
-            resp = self.recvResponse()
+        for _ in range(12):
+            # We could be mid-page refresh, so give a wide berth.
+            resp = self.recvResponse(0.25)
             if not resp:
                 # Ran out of responses, try sending the command again.
                 self.sendCommand(self.REQUEST_CURSOR)
@@ -120,6 +129,8 @@ class Terminal:
             else:
                 # Got a valid response!
                 break
+        else:
+            raise TerminalException("Couldn't receive cursor position from terminal!")
         respstr = resp[1:-1].decode("ascii")
         row, col = respstr.split(";", 1)
         return int(row), int(col)
@@ -274,7 +285,11 @@ class Terminal:
         # Attempt to read the next response from the serial terminal, handling escaped
         # arrowkeys as inputs as apposed to command responses.
         while True:
+            oldInputLen = len(self.pending)
             resp = self._recvResponseImpl(timeout)
+            if resp or len(self.pending) > oldInputLen:
+                # We got a successful response of some type, reset our polling.
+                self.lastPolled = time.time()
             if resp in {self.UP, self.DOWN, self.LEFT, self.RIGHT}:
                 self.pending.append(resp)
             else:
@@ -360,6 +375,18 @@ class Terminal:
             response = self._recvResponse(timeout=0.01)
             if response:
                 self.responses.append(response)
+
+        # Also, occasionally check that the terminal is still alive.
+        now = time.time()
+        if now - self.lastPolled > self.CHECK_INTERVAL:
+            self.lastPolled = now
+            if self.isOk():
+                self.pollFailures = 0
+            else:
+                self.pollFailures += 1
+                if self.pollFailures > self.MAX_FAILURES:
+                    # Do a hard check instead of soft.
+                    self.checkOk()
 
         # See if we have anything pending.
         val: Optional[bytes] = None

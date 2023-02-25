@@ -3,10 +3,11 @@ import json
 import os
 import random
 import sys
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from wiki import Wiki, Domain, Page
-from terminal import Terminal
+from terminal import Terminal, TerminalException
 
 
 class Action:
@@ -1247,7 +1248,7 @@ class Renderer:
 
     def clearInput(self) -> None:
         # Clear error display.
-        self.displayError("")
+        self.clearError()
 
         self.terminal.moveCursor(self.terminal.rows, 1)
         self.terminal.sendCommand(Terminal.SAVE_CURSOR)
@@ -1258,6 +1259,9 @@ class Renderer:
 
         # Clear command.
         self.input = ""
+
+    def clearError(self) -> None:
+        self.displayError("")
 
     def displayError(self, error: str) -> None:
         if error == self.lastError:
@@ -1457,68 +1461,100 @@ class Renderer:
         return None
 
 
+def spawnTerminalAndRenderer(port: str, baudrate: int) -> Tuple[Terminal, Renderer]:
+    print("Attempting to contact VT-100...", end="")
+    sys.stdout.flush()
+
+    while True:
+        try:
+            terminal = Terminal(port, baudrate)
+            print("SUCCESS!")
+
+            break
+        except TerminalException:
+            # Wait for terminal to re-awaken.
+            time.sleep(1.0)
+
+            print(".", end="")
+            sys.stdout.flush()
+
+    return terminal, Renderer(terminal)
+
+
 def main(port: str, baudrate: int) -> int:
     wiki = Wiki("https://samhayzen.github.io/ndb-web/web.json")
     nav = Navigation(wiki)
     page = nav.navigate("NX.INDEX")
 
-    terminal = Terminal(port, baudrate)
-    renderer = Renderer(terminal)
-    renderer.displayPage(page)
+    exiting = False
+    while not exiting:
+        # First, render the current page to the display.
+        terminal, renderer = spawnTerminalAndRenderer(port, baudrate)
+        renderer.displayPage(page)
+        renderer.clearInput()
 
-    while True:
-        # Grab input, de-duplicate held down up/down presses so they don't queue up.
-        # This can cause the entire message loop to desync as we pile up requests to
-        # scroll the screen, ultimately leading in rendering issues and a crash.
-        inputVal = terminal.recvInput()
-        if inputVal in {Terminal.UP, Terminal.DOWN}:
-            while inputVal == terminal.peekInput():
-                terminal.recvInput()
+        try:
+            while not exiting:
+                # Grab input, de-duplicate held down up/down presses so they don't queue up.
+                # This can cause the entire message loop to desync as we pile up requests to
+                # scroll the screen, ultimately leading in rendering issues and a crash.
+                inputVal = terminal.recvInput()
+                if inputVal in {Terminal.UP, Terminal.DOWN}:
+                    while inputVal == terminal.peekInput():
+                        terminal.recvInput()
 
-        if inputVal:
-            action = renderer.processInput(inputVal)
-            if isinstance(action, NavigateAction):
-                page = nav.navigate(action.uri)
-                renderer.displayPage(page)
-            elif isinstance(action, HomeAction):
-                page = nav.navigate("NX.INDEX")
-                renderer.displayPage(page)
-            elif isinstance(action, BackAction):
-                if nav.canGoBack():
-                    page = nav.back()
-                    renderer.displayPage(page)
-                else:
-                    renderer.clearInput()
-                    renderer.displayError("No previous page!")
-            elif isinstance(action, SettingAction):
-                if action.setting in {"cols", "columns"}:
-                    if action.value not in {"80", "132"}:
-                        renderer.displayError(
-                            f"Unrecognized column setting {action.value}"
+                if inputVal:
+                    action = renderer.processInput(inputVal)
+                    if isinstance(action, NavigateAction):
+                        page = nav.navigate(action.uri)
+                        renderer.displayPage(page)
+                    elif isinstance(action, HomeAction):
+                        page = nav.navigate("NX.INDEX")
+                        renderer.displayPage(page)
+                    elif isinstance(action, BackAction):
+                        if nav.canGoBack():
+                            page = nav.back()
+                            renderer.displayPage(page)
+                        else:
+                            renderer.clearInput()
+                            renderer.displayError("No previous page!")
+                    elif isinstance(action, SettingAction):
+                        if action.setting in {"cols", "columns"}:
+                            if action.value not in {"80", "132"}:
+                                renderer.displayError(
+                                    f"Unrecognized column setting {action.value}"
+                                )
+                            elif action.value == "80":
+                                if terminal.columns != 80:
+                                    terminal.set80Columns()
+                                    renderer.displayPage(page)
+                                else:
+                                    renderer.clearInput()
+                            elif action.value == "132":
+                                if terminal.columns != 132:
+                                    terminal.set132Columns()
+                                    renderer.displayPage(page)
+                                else:
+                                    renderer.clearInput()
+                        else:
+                            renderer.displayError(
+                                f"Unrecognized setting {action.setting}"
+                            )
+                    elif isinstance(action, RandomAction):
+                        randomPage = random.choice(wiki.getAllPages())
+                        page = nav.navigate(
+                            f"{randomPage.domain.root}:{randomPage.path}"
                         )
-                    elif action.value == "80":
-                        if terminal.columns != 80:
-                            terminal.set80Columns()
-                            renderer.displayPage(page)
-                        else:
-                            renderer.clearInput()
-                    elif action.value == "132":
-                        if terminal.columns != 132:
-                            terminal.set132Columns()
-                            renderer.displayPage(page)
-                        else:
-                            renderer.clearInput()
-                else:
-                    renderer.displayError(f"Unrecognized setting {action.setting}")
-            elif isinstance(action, RandomAction):
-                randomPage = random.choice(wiki.getAllPages())
-                page = nav.navigate(f"{randomPage.domain.root}:{randomPage.path}")
-                renderer.displayPage(page)
-            elif isinstance(action, HelpAction):
-                page = nav.navigate("LOCAL.HELP")
-                renderer.displayPage(page)
-            elif isinstance(action, ExitAction):
-                break
+                        renderer.displayPage(page)
+                    elif isinstance(action, HelpAction):
+                        page = nav.navigate("LOCAL.HELP")
+                        renderer.displayPage(page)
+                    elif isinstance(action, ExitAction):
+                        print("Got request to end session!")
+                        exiting = True
+        except TerminalException:
+            # Terminal went away mid-transaction.
+            print("Lost terminal, will attempt a reconnect.")
 
     # Restore the screen before exiting.
     terminal.reset()
