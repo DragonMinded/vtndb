@@ -492,7 +492,7 @@ class SearchRendererCore(TextRendererCore):
         elif inputStr[0] == "#":
             # Result navigation.
             try:
-                result = int(inputStr[1:])
+                result = int(inputStr[1:].strip())
                 result -= 1
 
                 if result < 0 or result >= len(self.results):
@@ -994,7 +994,7 @@ class CalendarRendererCore(TextRendererCore):
         elif inputStr[0] == "#":
             # Calendar navigation.
             try:
-                result = int(inputStr[1:])
+                result = int(inputStr[1:].strip())
                 result -= 1
 
                 if result < 0 or result >= len(self.links):
@@ -1433,7 +1433,7 @@ class Renderer:
             if actual[0] == "!":
                 # Link navigation.
                 try:
-                    link = int(actual[1:])
+                    link = int(actual[1:].strip())
                     link -= 1
 
                     if link < 0 or link >= len(page.links):
@@ -1448,9 +1448,13 @@ class Renderer:
                         return NavigateAction(f"{page.domain.root}:{page.links[link]}")
                 except ValueError:
                     self.displayError("Invalid link navigation request!")
-            elif actual == "back":
+            elif actual in {"b", "back"}:
                 return BackAction()
-            elif actual == "goto" or actual.startswith("goto "):
+            elif (
+                actual in {"g", "goto"}
+                or actual.startswith("g ")
+                or actual.startswith("goto ")
+            ):
                 if " " not in actual:
                     self.displayError("No page requested!")
                 else:
@@ -1467,16 +1471,16 @@ class Renderer:
                 return HomeAction()
             elif actual == "root":
                 return NavigateAction(page.domain.root)
-            elif actual == "help":
+            elif actual in {"h", "help"}:
                 return HelpAction(page.extension)
             elif actual == "random":
                 return RandomAction()
             elif actual == "exit":
                 return ExitAction()
-            elif actual == "next":
+            elif actual in {"n", "next"}:
                 self.clearInput()
                 self.renderer.pageDown()
-            elif actual == "prev":
+            elif actual in {"p", "prev"}:
                 self.clearInput()
                 self.renderer.pageUp()
             elif actual == "top":
