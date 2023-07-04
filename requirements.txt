@@ -1,6 +1,6 @@
+vtpy @ git+https://github.com/DragonMinded/vtpy.git
 requests
-pySerial
+types-requests
 mypy
 flake8
 black
-types-requests

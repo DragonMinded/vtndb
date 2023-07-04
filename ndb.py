@@ -7,7 +7,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from wiki import Wiki, Domain, Page
-from terminal import Terminal, TerminalException
+from vtpy import Terminal, TerminalException
 
 
 class Action:
