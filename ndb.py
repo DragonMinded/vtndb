@@ -1105,6 +1105,7 @@ class Renderer:
     def __init__(self, terminal: Terminal) -> None:
         self.terminal = terminal
         self.input = ""
+        self.cursorPos = 1
         self.page: Optional[Page] = None
         self.lastError = ""
         self.renderer = RendererCore(terminal, 3, self.terminal.rows - 2)
@@ -1341,6 +1342,7 @@ class Renderer:
 
         # Clear command.
         self.input = ""
+        self.cursorPos = 1
 
     def clearError(self) -> None:
         self.displayError("")
@@ -1364,15 +1366,15 @@ class Renderer:
             return None
         page = self.page
 
-        row, col = self.terminal.fetchCursor()
+        row, _ = self.terminal.fetchCursor()
         if inputVal == Terminal.LEFT:
-            if col > 1:
-                col -= 1
-                self.terminal.moveCursor(row, col)
+            if self.cursorPos > 1:
+                self.cursorPos -= 1
+                self.terminal.moveCursor(row, self.cursorPos)
         elif inputVal == Terminal.RIGHT:
-            if col < (len(self.input) + 1):
-                col += 1
-                self.terminal.moveCursor(row, col)
+            if self.cursorPos < (len(self.input) + 1):
+                self.cursorPos += 1
+                self.terminal.moveCursor(row, self.cursorPos)
         elif inputVal == Terminal.UP:
             self.renderer.scrollUp()
         elif inputVal == Terminal.DOWN:
@@ -1380,42 +1382,42 @@ class Renderer:
         elif inputVal in {Terminal.BACKSPACE, Terminal.DELETE}:
             if self.input:
                 # Just subtract from input.
-                if col == len(self.input) + 1:
+                if self.cursorPos == len(self.input) + 1:
                     # Erasing at the end of the line.
                     self.input = self.input[:-1]
 
-                    col -= 1
-                    self.terminal.moveCursor(row, col)
+                    self.cursorPos -= 1
+                    self.terminal.moveCursor(row, self.cursorPos)
                     self.terminal.sendCommand(Terminal.SET_NORMAL)
                     self.terminal.sendCommand(Terminal.SET_REVERSE)
                     self.terminal.sendText(" ")
-                    self.terminal.moveCursor(row, col)
-                elif col == 1:
+                    self.terminal.moveCursor(row, self.cursorPos)
+                elif self.cursorPos == 1:
                     # Erasing at the beginning, do nothing.
                     pass
-                elif col == 2:
+                elif self.cursorPos == 2:
                     # Erasing at the beginning of the line.
                     self.input = self.input[1:]
 
-                    col -= 1
-                    self.terminal.moveCursor(row, col)
+                    self.cursorPos -= 1
+                    self.terminal.moveCursor(row, self.cursorPos)
                     self.terminal.sendCommand(Terminal.SET_NORMAL)
                     self.terminal.sendCommand(Terminal.SET_REVERSE)
                     self.terminal.sendText(self.input)
                     self.terminal.sendText(" ")
-                    self.terminal.moveCursor(row, col)
+                    self.terminal.moveCursor(row, self.cursorPos)
                 else:
                     # Erasing in the middle of the line.
-                    spot = col - 2
+                    spot = self.cursorPos - 2
                     self.input = self.input[:spot] + self.input[(spot + 1) :]
 
-                    col -= 1
-                    self.terminal.moveCursor(row, col)
+                    self.cursorPos -= 1
+                    self.terminal.moveCursor(row, self.cursorPos)
                     self.terminal.sendCommand(Terminal.SET_NORMAL)
                     self.terminal.sendCommand(Terminal.SET_REVERSE)
                     self.terminal.sendText(self.input[spot:])
                     self.terminal.sendText(" ")
-                    self.terminal.moveCursor(row, col)
+                    self.terminal.moveCursor(row, self.cursorPos)
         elif inputVal == b"\r":
             # Ignore this.
             pass
@@ -1527,22 +1529,24 @@ class Renderer:
                     # Just add to input.
                     char = inputVal.decode("ascii")
 
-                    if col == len(self.input) + 1:
+                    if self.cursorPos == len(self.input) + 1:
                         # Just appending to the input.
                         self.input += char
                         self.terminal.sendCommand(Terminal.SET_NORMAL)
                         self.terminal.sendCommand(Terminal.SET_REVERSE)
                         self.terminal.sendText(char)
-                        self.terminal.moveCursor(row, col + 1)
+                        self.terminal.moveCursor(row, self.cursorPos + 1)
+                        self.cursorPos += 1
                     else:
                         # Adding to mid-input.
-                        spot = col - 1
+                        spot = self.cursorPos - 1
                         self.input = self.input[:spot] + char + self.input[spot:]
 
                         self.terminal.sendCommand(Terminal.SET_NORMAL)
                         self.terminal.sendCommand(Terminal.SET_REVERSE)
                         self.terminal.sendText(self.input[spot:])
-                        self.terminal.moveCursor(row, col + 1)
+                        self.terminal.moveCursor(row, self.cursorPos + 1)
+                        self.cursorPos += 1
 
         # Nothing happening here!
         return None
