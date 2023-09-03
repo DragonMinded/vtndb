@@ -7,7 +7,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from wiki import Wiki, Domain, Page
-from vtpy import Terminal, TerminalException
+from vtpy import SerialTerminal, STDIOTerminal, Terminal, TerminalException
 
 
 class Action:
@@ -1552,27 +1552,47 @@ class Renderer:
         return None
 
 
-def spawnTerminalAndRenderer(port: str, baudrate: int) -> Tuple[Terminal, Renderer]:
-    print("Attempting to contact VT-100...", end="")
-    sys.stdout.flush()
+def spawnSerialTerminalAndRenderer(port: str, baudrate: int) -> Tuple[Terminal, Renderer]:
+    print("Attempting to contact VT-100...", end="", file=sys.stderr)
+    sys.stderr.flush()
 
     while True:
         try:
-            terminal = Terminal(port, baudrate)
-            print("SUCCESS!")
+            terminal = SerialTerminal(port, baudrate)
+            print("SUCCESS!", file=sys.stderr)
 
             break
         except TerminalException:
             # Wait for terminal to re-awaken.
             time.sleep(1.0)
 
-            print(".", end="")
-            sys.stdout.flush()
+            print(".", end="", file=sys.stderr)
+            sys.stderr.flush()
 
     return terminal, Renderer(terminal)
 
 
-def main(port: str, baudrate: int) -> int:
+def spawnSTDIOTerminalAndRenderer() -> Tuple[Terminal, Renderer]:
+    print("Attempting to contact VT-100...", end="", file=sys.stderr)
+    sys.stderr.flush()
+
+    while True:
+        try:
+            terminal = STDIOTerminal()
+            print("SUCCESS!", file=sys.stderr)
+
+            break
+        except TerminalException:
+            # Wait for terminal to re-awaken.
+            time.sleep(1.0)
+
+            print(".", end="", file=sys.stderr)
+            sys.stderr.flush()
+
+    return terminal, Renderer(terminal)
+
+
+def main(port: str, baudrate: int, use_stdio: bool) -> int:
     wiki = Wiki("https://samhayzen.github.io/ndb-web/web.json")
     nav = Navigation(wiki)
     page = nav.navigate("NX.INDEX")
@@ -1580,7 +1600,10 @@ def main(port: str, baudrate: int) -> int:
     exiting = False
     while not exiting:
         # First, render the current page to the display.
-        terminal, renderer = spawnTerminalAndRenderer(port, baudrate)
+        if use_stdio:
+            terminal, rendere = spawnSTDIOTerminalAndRenderer()
+        else:
+            terminal, renderer = spawnSerialTerminalAndRenderer(port, baudrate)
         renderer.displayPage(page)
         renderer.clearInput()
 
@@ -1641,13 +1664,13 @@ def main(port: str, baudrate: int) -> int:
                         page = nav.navigate(f"LOCAL.HELP:{action.pageType}")
                         renderer.displayPage(page)
                     elif isinstance(action, ExitAction):
-                        print("Got request to end session!")
+                        print("Got request to end session!", file=sys.stderr)
                         exiting = True
         except TerminalException:
             # Terminal went away mid-transaction.
-            print("Lost terminal, will attempt a reconnect.")
+            print("Lost terminal, will attempt a reconnect.", file=sys.stderr)
         except KeyboardInterrupt:
-            print("Got request to end session!")
+            print("Got request to end session!", file=sys.stderr)
             exiting = True
 
     # Restore the screen before exiting.
@@ -1671,6 +1694,12 @@ if __name__ == "__main__":
         type=int,
         help="Baud rate to use with VT-100, defaults to 9600",
     )
+    parser.add_argument(
+        "--stdio",
+        default=False,
+        action="store_true",
+        help="Talk to stdin/stdout instead of a serial port",
+    )
     args = parser.parse_args()
 
-    sys.exit(main(args.port, args.baud))
+    sys.exit(main(args.port, args.baud, args.stdio))
