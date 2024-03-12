@@ -1552,13 +1552,13 @@ class Renderer:
         return None
 
 
-def spawnSerialTerminalAndRenderer(port: str, baudrate: int) -> Tuple[Terminal, Renderer]:
+def spawnSerialTerminalAndRenderer(port: str, baudrate: int, flow: bool) -> Tuple[Terminal, Renderer]:
     print("Attempting to contact VT-100...", end="", file=sys.stderr)
     sys.stderr.flush()
 
     while True:
         try:
-            terminal = SerialTerminal(port, baudrate)
+            terminal = SerialTerminal(port, baudrate, flowControl=flow)
             print("SUCCESS!", file=sys.stderr)
 
             break
@@ -1592,7 +1592,7 @@ def spawnSTDIOTerminalAndRenderer() -> Tuple[Terminal, Renderer]:
     return terminal, Renderer(terminal)
 
 
-def main(port: str, baudrate: int, use_stdio: bool) -> int:
+def main(port: str, baudrate: int, flow: bool, use_stdio: bool) -> int:
     wiki = Wiki("https://samhayzen.github.io/ndb-web/web.json")
     nav = Navigation(wiki)
     page = nav.navigate("NX.INDEX")
@@ -1603,7 +1603,7 @@ def main(port: str, baudrate: int, use_stdio: bool) -> int:
         if use_stdio:
             terminal, rendere = spawnSTDIOTerminalAndRenderer()
         else:
-            terminal, renderer = spawnSerialTerminalAndRenderer(port, baudrate)
+            terminal, renderer = spawnSerialTerminalAndRenderer(port, baudrate, flow)
         renderer.displayPage(page)
         renderer.clearInput()
 
@@ -1695,6 +1695,11 @@ if __name__ == "__main__":
         help="Baud rate to use with VT-100, defaults to 9600",
     )
     parser.add_argument(
+        "--flow",
+        action="store_true",
+        help="Enable software-based flow control (XON/XOFF)",
+    )
+    parser.add_argument(
         "--stdio",
         default=False,
         action="store_true",
@@ -1702,4 +1707,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    sys.exit(main(args.port, args.baud, args.stdio))
+    sys.exit(main(args.port, args.baud, args.flow, args.stdio))
