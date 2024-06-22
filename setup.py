@@ -3,7 +3,7 @@ from distutils.core import setup
 
 setup(
     name="vtndb",
-    version="1.0.0",
+    version="1.0.1",
     description="VT-100 Nth Dimensional Borders Wiki Frontend",
     author="DragonMinded",
     license="Public Domain",

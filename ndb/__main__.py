@@ -6,7 +6,7 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from wiki import Wiki, Domain, Page
+from .wiki import Wiki, Domain, Page
 from vtpy import SerialTerminal, STDIOTerminal, Terminal, TerminalException
 
 
