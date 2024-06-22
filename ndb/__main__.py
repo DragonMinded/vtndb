@@ -1679,7 +1679,7 @@ def main(port: str, baudrate: int, flow: bool, use_stdio: bool) -> int:
     return 0
 
 
-if __name__ == "__main__":
+def cli() -> None:
     parser = argparse.ArgumentParser(description="VT-100 terminal driver for NDBWiki")
 
     parser.add_argument(
@@ -1708,3 +1708,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     sys.exit(main(args.port, args.baud, args.flow, args.stdio))
+
+
+if __name__ == "__main__":
+    cli()

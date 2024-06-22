@@ -1,0 +1,4 @@
+types-requests
+mypy
+flake8
+black
